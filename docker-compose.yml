@@ -39,7 +39,20 @@ services:
       db:
         condition: service_healthy
 
-  # web: Mission Control (Track D) — add here with build: ./web and NEXT_PUBLIC_API_URL=http://localhost:8080
+  policycenter-mock:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      PORT: 8180
+    ports: ["8180:8180"]
+    command: ["java", "-jar", "/app/provenpath-pcmock.jar"]
+
+  web:
+    build: ./web
+    ports: ["3000:3000"]
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8080
 
 volumes:
   pgdata:
