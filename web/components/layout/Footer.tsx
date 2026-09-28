@@ -43,7 +43,7 @@ export function Footer({ currentIteration, nodeStats, isDark = true }: FooterPro
         </span>
 
         <span className="flex items-center gap-1.5">
-          <span className={`font-bold ${isDark ? 'text-white' : 'text-black'}`}>
+          <span className="font-bold text-emerald-400">
             {nodeStats.passed} Passed
           </span>
           {nodeStats.failed > 0 && (

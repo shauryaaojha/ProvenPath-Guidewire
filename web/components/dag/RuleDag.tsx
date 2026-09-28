@@ -138,28 +138,27 @@ export function RuleDag({ nodesMap, isDark = true }: RuleDagProps) {
         const status: NodeStatus = liveResult ? liveResult.result : 'PENDING';
         const isFailed = status === 'FAILED';
         const isPassed = status === 'PASSED';
+        const isEvaluating = status !== 'PENDING' && status !== 'SKIPPED';
         const strokeColor = isFailed
           ? '#f43f5e'
-          : isPassed
-          ? isDark
-            ? '#ffffff'
-            : '#18181b'
+          : isPassed || isEvaluating
+          ? '#38bdf8'
           : isDark
           ? '#334155'
           : '#cbd5e1';
 
         return {
           ...edge,
-          animated: status !== 'PENDING' && status !== 'SKIPPED',
+          animated: isEvaluating,
           style: {
             stroke: strokeColor,
-            strokeWidth: isFailed ? 2.5 : isPassed ? 1.5 : 1,
+            strokeWidth: isFailed ? 2.5 : (isPassed || isEvaluating) ? 2 : 1,
           },
           markerEnd: {
             type: MarkerType.ArrowClosed,
             color: strokeColor,
-            width: 12,
-            height: 12,
+            width: 13,
+            height: 13,
           },
         };
       })
@@ -194,11 +193,7 @@ export function RuleDag({ nodesMap, isDark = true }: RuleDagProps) {
           }`}
         >
           <span className="flex items-center gap-1.5">
-            <span
-              className={`w-2.5 h-2.5 rounded-full ${
-                isDark ? 'bg-white shadow-[0_0_8px_rgba(255,255,255,0.7)]' : 'bg-black'
-              }`}
-            />{' '}
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.7)]" />{' '}
             Passed
           </span>
           <span className="flex items-center gap-1.5">

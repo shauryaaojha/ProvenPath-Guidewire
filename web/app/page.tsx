@@ -13,7 +13,6 @@ import { ReviewerPanel } from '@/components/gates/ReviewerPanel';
 import { DeployPanel } from '@/components/deploy/DeployPanel';
 import { ProvenanceDrawer } from '@/components/drawers/ProvenanceDrawer';
 import { MetricsPanel } from '@/components/metrics/MetricsPanel';
-import { PitchDeckModal } from '@/components/deck/PitchDeckModal';
 import { GateBlockedPayload } from '@/lib/contracts';
 
 export default function MissionControlPage() {
@@ -24,7 +23,6 @@ export default function MissionControlPage() {
   );
   const [selectedClauseId, setSelectedClauseId] = useState<string | null>(null);
   const [isMetricsOpen, setIsMetricsOpen] = useState<boolean>(false);
-  const [isPitchDeckOpen, setIsPitchDeckOpen] = useState<boolean>(false);
   const [isDeployOpen, setIsDeployOpen] = useState<boolean>(false);
   const [isReviewOpen, setIsReviewOpen] = useState<boolean>(true);
   const [customBlockedData, setCustomBlockedData] = useState<GateBlockedPayload | null>(null);
@@ -83,7 +81,6 @@ export default function MissionControlPage() {
         onStartDemo={handleStartDemo}
         onReset={handleReset}
         onOpenMetrics={() => setIsMetricsOpen(true)}
-        onOpenPitchDeck={() => setIsPitchDeckOpen(true)}
         onOpenDeploy={() => setIsDeployOpen(true)}
         onOpenReview={() => setIsReviewOpen(true)}
         onTriggerTamper={handleTamperBlocked}
@@ -195,16 +192,10 @@ export default function MissionControlPage() {
         onClose={() => setSelectedClauseId(null)}
       />
 
-      {/* 5. Metrics & Assurance Panel (Charts & vector graphics preserved) */}
+      {/* 5. Metrics & Assurance Panel */}
       <MetricsPanel
         isOpen={isMetricsOpen}
         onClose={() => setIsMetricsOpen(false)}
-      />
-
-      {/* 6. Pitch Deck Modal (Vector slides & diagrams preserved) */}
-      <PitchDeckModal
-        isOpen={isPitchDeckOpen}
-        onClose={() => setIsPitchDeckOpen(false)}
       />
     </div>
   );

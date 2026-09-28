@@ -27,12 +27,12 @@ export const CustomRuleNode = memo(({ data }: { data: RuleNodeData }) => {
             ? 'bg-neutral-950/80 hover:bg-neutral-900'
             : 'bg-white hover:bg-neutral-50',
           border: isDark
-            ? 'border-white/50 shadow-[0_0_15px_rgba(255,255,255,0.12)]'
-            : 'border-neutral-900 shadow-sm',
+            ? 'border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.18)]'
+            : 'border-emerald-600/60 shadow-sm',
           badge: isDark
-            ? 'bg-white/10 text-white border-white/20'
-            : 'bg-neutral-100 text-neutral-900 border-neutral-300 font-bold',
-          icon: <CheckCircle2 className="w-3.5 h-3.5" />,
+            ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 font-bold'
+            : 'bg-emerald-50 text-emerald-700 border-emerald-300 font-bold',
+          icon: <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />,
         };
       case 'FAILED':
         return {

@@ -22,7 +22,6 @@ interface NavbarProps {
   onStartDemo: () => void;
   onReset: () => void;
   onOpenMetrics: () => void;
-  onOpenPitchDeck: () => void;
   onOpenDeploy: () => void;
   onOpenReview?: () => void;
   onTriggerTamper: (data: unknown) => void;
@@ -38,7 +37,6 @@ export function Navbar({
   onStartDemo,
   onReset,
   onOpenMetrics,
-  onOpenPitchDeck,
   onOpenDeploy,
   onOpenReview,
   onTriggerTamper,
@@ -102,11 +100,11 @@ export function Navbar({
           <span
             className={`flex items-center gap-1.5 px-3 py-1 rounded-full font-mono text-[11px] font-bold border ${
               isDark
-                ? 'bg-white/15 border-white/40 text-white'
-                : 'bg-black/10 border-black/30 text-black'
+                ? 'bg-emerald-950/70 border-emerald-500/60 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.3)]'
+                : 'bg-emerald-50 border-emerald-300 text-emerald-700'
             }`}
           >
-            <ShieldCheck className="w-3.5 h-3.5" /> VERIFIED COMPLIANT
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> VERIFIED COMPLIANT
           </span>
         );
       case 'approved':
@@ -120,7 +118,7 @@ export function Navbar({
                 : 'bg-black/10 border-black/30 text-black hover:bg-black/15'
             }`}
           >
-            <Server className="w-3.5 h-3.5" /> DEPLOYING TO PC
+            <Server className="w-3.5 h-3.5" /> DEPLOYING TO POLICYCENTER
           </button>
         );
       case 'deployed':
@@ -134,7 +132,7 @@ export function Navbar({
             }`}
             title="Click to view Guidewire PolicyCenter deployment manifest & files"
           >
-            <ShieldCheck className="w-3.5 h-3.5" /> PC DEPLOY VERIFIED
+            <ShieldCheck className="w-3.5 h-3.5" /> POLICYCENTER DEPLOY VERIFIED
           </button>
         );
       default:
@@ -166,7 +164,7 @@ export function Navbar({
       }`}
     >
       <div className="flex items-center justify-between gap-4">
-        {/* Logo & Product Name (Monochrome) */}
+        {/* Logo & Product Name (Monochrome Minimalist) */}
         <div className="flex items-center gap-3">
           <div
             className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-sm border transition-colors ${
@@ -178,27 +176,9 @@ export function Navbar({
             <ShieldCheck className="w-5 h-5" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-black font-mono tracking-wider uppercase">
-                PROVENPATH
-              </span>
-              <span
-                className={`text-[10px] font-mono px-2 py-0.5 rounded-full border font-semibold ${
-                  isDark
-                    ? 'bg-white/10 text-white border-white/20'
-                    : 'bg-neutral-100 text-neutral-800 border-neutral-300'
-                }`}
-              >
-                POLICYCENTER 10
-              </span>
-            </div>
-            <p
-              className={`text-[10px] font-mono ${
-                isDark ? 'text-neutral-400' : 'text-neutral-500'
-              }`}
-            >
-              Deterministic Pre-Commit Compliance Gate · Track D: Mission Control
-            </p>
+            <span className="text-sm font-black font-mono tracking-wider uppercase">
+              PROVENPATH
+            </span>
           </div>
         </div>
 
@@ -240,18 +220,6 @@ export function Navbar({
             }`}
           >
             <Award className="w-3.5 h-3.5" /> Metrics
-          </button>
-
-          {/* Pitch Deck Trigger (vector charts inside modal preserved) */}
-          <button
-            onClick={onOpenPitchDeck}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-mono font-medium transition-colors cursor-pointer ${
-              isDark
-                ? 'bg-neutral-900 hover:bg-neutral-800 border-neutral-700 text-neutral-200'
-                : 'bg-neutral-100 hover:bg-neutral-200 border-neutral-300 text-neutral-800'
-            }`}
-          >
-            <Presentation className="w-3.5 h-3.5" /> Pitch Deck
           </button>
 
           <div

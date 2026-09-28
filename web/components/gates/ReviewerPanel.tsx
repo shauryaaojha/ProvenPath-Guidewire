@@ -82,6 +82,41 @@ export function ReviewerPanel({
   const [decisionState, setDecisionState] = useState<'idle' | 'approved' | 'rejected'>('idle');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isDismissed, setIsDismissed] = useState<boolean>(false);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const dragRef = React.useRef<{ startX: number; startY: number; initX: number; initY: number }>({
+    startX: 0,
+    startY: 0,
+    initX: 0,
+    initY: 0,
+  });
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    const card = e.currentTarget.closest('[data-modal-card="true"]') as HTMLElement;
+    if (!card) return;
+    const rect = card.getBoundingClientRect();
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      initX: pos ? pos.x : rect.left,
+      initY: pos ? pos.y : rect.top,
+    };
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const dx = moveEvent.clientX - dragRef.current.startX;
+      const dy = moveEvent.clientY - dragRef.current.startY;
+      const newX = Math.max(10, Math.min(window.innerWidth - 350, dragRef.current.initX + dx));
+      const newY = Math.max(10, Math.min(window.innerHeight - 150, dragRef.current.initY + dy));
+      setPos({ x: newX, y: newY });
+    };
+
+    const handleMouseUp = () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
 
   const handleApprove = async () => {
     setIsSubmitting(true);
@@ -141,18 +176,22 @@ export function ReviewerPanel({
       className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 flex items-center justify-center p-4 animate-in fade-in duration-200"
     >
       <div
+        data-modal-card="true"
         onClick={e => e.stopPropagation()}
+        style={pos ? { position: 'fixed', left: `${pos.x}px`, top: `${pos.y}px`, margin: 0 } : undefined}
         className={`border rounded-2xl max-w-2xl w-full p-6 shadow-2xl relative transition-colors ${
           isDark
             ? 'bg-neutral-950 border-neutral-700 text-white shadow-[0_0_60px_rgba(0,0,0,0.8)]'
             : 'bg-white border-neutral-300 text-neutral-900 shadow-xl'
         }`}
       >
-        {/* Header */}
+        {/* Header (Draggable) */}
         <div
-          className={`flex items-center justify-between border-b pb-4 mb-4 ${
+          onMouseDown={handleMouseDown}
+          className={`flex items-center justify-between border-b pb-4 mb-4 cursor-grab active:cursor-grabbing select-none ${
             isDark ? 'border-neutral-800' : 'border-neutral-200'
           }`}
+          title="Click and drag to move panel"
         >
           <div className="flex items-center gap-3">
             <div

@@ -72,3 +72,54 @@ button[data-nextjs-dev-tools-button],
   background-color: currentColor !important;
   border: 1px solid var(--card-border) !important;
 }
+
+/* React Flow Zoom / Nav Controls High Contrast */
+.dark .react-flow__controls,
+:root:not(.light) .react-flow__controls {
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  background-color: #121216 !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6) !important;
+}
+
+.dark .react-flow__controls button,
+:root:not(.light) .react-flow__controls button {
+  background-color: #18181e !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+  fill: #ffffff !important;
+}
+
+.dark .react-flow__controls button:hover,
+:root:not(.light) .react-flow__controls button:hover {
+  background-color: #272732 !important;
+}
+
+.dark .react-flow__controls button svg,
+:root:not(.light) .react-flow__controls button svg {
+  fill: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+/* Light mode React Flow Controls */
+.light .react-flow__controls {
+  border-color: #cbd5e1 !important;
+  background-color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+}
+
+.light .react-flow__controls button {
+  background-color: #ffffff !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  color: #0f172a !important;
+  fill: #0f172a !important;
+}
+
+.light .react-flow__controls button:hover {
+  background-color: #f1f5f9 !important;
+}
+
+.light .react-flow__controls button svg {
+  fill: #0f172a !important;
+  stroke: #0f172a !important;
+}
+
