@@ -1,0 +1,236 @@
+import { RuleDefinition, Layer } from './contracts';
+
+export const RULE_LAYERS: { layer: Layer; label: string; description: string; color: string }[] = [
+  { layer: 'TYPE', label: '1. Type & Schema', description: 'INR money fields, regex patterns, entity constraints', color: '#6366f1' },
+  { layer: 'RANGE', label: '2. Range & Limits', description: '₹5L–₹5Cr aggregate, sublimits, waiting periods', color: '#ec4899' },
+  { layer: 'CONSISTENCY', label: '3. Consistency', description: 'Sum <= aggregate, deductibles, exclusion compatibility', color: '#8b5cf6' },
+  { layer: 'RULE_MATCH', label: '4. Rule Match', description: 'Mandatory coverages, exclusions, CERT-In conditions', color: '#06b6d4' },
+  { layer: 'SOURCE', label: '5. Source Integrity', description: 'Statute citations, byte-exact SHA256 integrity', color: '#10b981' },
+  { layer: 'GROUNDING', label: '6. Grounding', description: 'Prose summary quantities matched to verified terms', color: '#f59e0b' },
+];
+
+export const RULES_CATALOG: RuleDefinition[] = [
+  // LAYER 1: TYPE (3)
+  {
+    ruleCode: 'CYB-TYPE-001',
+    name: 'Money fields in INR',
+    layer: 'TYPE',
+    appliesTo: 'clause.limitMaxInr, clause.deductibleInr, proposal.aggregateLimitInr',
+    dependsOn: [],
+    sourceCode: 'IRDAI-CYB-G-2024-S2.1',
+    errorTemplate: 'Monetary field {field} must be positive integer in INR currency',
+  },
+  {
+    ruleCode: 'CYB-TYPE-002',
+    name: 'Pattern code & GLLine entity',
+    layer: 'TYPE',
+    appliesTo: 'clause.patternCode, clause.owningEntityType',
+    dependsOn: [],
+    sourceCode: 'IRDAI-CYB-G-2024-S2.2',
+    errorTemplate: 'Pattern {patternCode} must match ^SMCyber[A-Za-z]+Cov$ on GeneralLiabilityLine',
+  },
+  {
+    ruleCode: 'CYB-TYPE-003',
+    name: 'Existence enum & Category',
+    layer: 'TYPE',
+    appliesTo: 'clause.existence, clause.category',
+    dependsOn: [],
+    sourceCode: 'IRDAI-CYB-G-2024-S2.3',
+    errorTemplate: 'Existence must be Required|Suggested|Electable; category CyberFirstParty|CyberThirdParty',
+  },
+
+  // LAYER 2: RANGE (7)
+  {
+    ruleCode: 'CYB-RNG-001',
+    name: 'Aggregate limit ₹5L–₹5Cr',
+    layer: 'RANGE',
+    appliesTo: 'proposal.aggregateLimitInr',
+    dependsOn: ['CYB-TYPE-001'],
+    sourceCode: 'IRDAI-CYB-G-2024-S3.1',
+    errorTemplate: 'Aggregate limit INR {actual} must be between ₹5,00,000 and ₹5,00,00,000',
+  },
+  {
+    ruleCode: 'CYB-RNG-002',
+    name: 'Extortion sublimit <= 50% aggregate',
+    layer: 'RANGE',
+    appliesTo: 'coverage[patternCode=SMCyberExtortionCov]',
+    dependsOn: ['CYB-TYPE-001', 'CYB-RNG-001'],
+    sourceCode: 'IRDAI-CYB-G-2024-S3.4',
+    errorTemplate: 'Extortion sublimit INR {actual} exceeds 50% of aggregate (INR {expected})',
+  },
+  {
+    ruleCode: 'CYB-RNG-003',
+    name: 'Deductible 1%–10% of sublimit',
+    layer: 'RANGE',
+    appliesTo: 'clause.deductibleInr',
+    dependsOn: ['CYB-TYPE-001'],
+    sourceCode: 'IRDAI-CYB-G-2024-S3.2',
+    errorTemplate: 'Deductible {actual} is outside 1%–10% boundary of clause sublimit',
+  },
+  {
+    ruleCode: 'CYB-RNG-004',
+    name: 'BI waiting period 8h–72h',
+    layer: 'RANGE',
+    appliesTo: 'coverage[patternCode=SMCyberBusinessInterruptionCov]',
+    dependsOn: ['CYB-TYPE-001'],
+    sourceCode: 'IRDAI-CYB-G-2024-S3.3',
+    errorTemplate: 'Waiting period {actual}h must be between 8h and 72h',
+  },
+  {
+    ruleCode: 'CYB-RNG-005',
+    name: 'Turnover <= ₹250Cr',
+    layer: 'RANGE',
+    appliesTo: 'proposal.turnoverInr',
+    dependsOn: ['CYB-TYPE-001'],
+    sourceCode: 'IRDAI-CYB-G-2024-S3.5',
+    errorTemplate: 'Turnover INR {actual} exceeds SME eligibility threshold of ₹250 Cr',
+  },
+  {
+    ruleCode: 'CYB-RNG-006',
+    name: 'Rating factors between 0.5 and 3.0',
+    layer: 'RANGE',
+    appliesTo: 'clause.factors',
+    dependsOn: ['CYB-TYPE-001'],
+    sourceCode: 'IRDAI-CYB-G-2024-S3.6',
+    errorTemplate: 'Rating factor {actual} must be in safe actuarial range 0.5–3.0',
+  },
+  {
+    ruleCode: 'CYB-RNG-007',
+    name: 'Minimum premium >= ₹10,000',
+    layer: 'RANGE',
+    appliesTo: 'proposal.minimumPremiumInr',
+    dependsOn: ['CYB-TYPE-001'],
+    sourceCode: 'IRDAI-CYB-G-2024-S3.7',
+    errorTemplate: 'Minimum premium INR {actual} below regulatory floor ₹10,000',
+  },
+
+  // LAYER 3: CONSISTENCY (4)
+  {
+    ruleCode: 'CYB-CON-001',
+    name: 'Σ first-party limits <= aggregate',
+    layer: 'CONSISTENCY',
+    appliesTo: 'clauses[category=CyberFirstParty]',
+    dependsOn: ['CYB-RNG-001', 'CYB-RNG-002'],
+    sourceCode: 'IRDAI-CYB-G-2024-S6.1',
+    errorTemplate: 'Sum of first-party limits INR {actual} exceeds policy aggregate {expected}',
+  },
+  {
+    ruleCode: 'CYB-CON-002',
+    name: 'Deductible strictly < limit',
+    layer: 'CONSISTENCY',
+    appliesTo: 'clause.deductibleInr < clause.limitMaxInr',
+    dependsOn: ['CYB-RNG-003'],
+    sourceCode: 'IRDAI-CYB-G-2024-S6.2',
+    errorTemplate: 'Deductible INR {actual} cannot equal or exceed clause limit',
+  },
+  {
+    ruleCode: 'CYB-CON-003',
+    name: 'No exclusion nullifies required coverage',
+    layer: 'CONSISTENCY',
+    appliesTo: 'clauses[kind=EXCLUSION]',
+    dependsOn: ['CYB-TYPE-003'],
+    sourceCode: 'IRDAI-CYB-G-2024-S6.3',
+    errorTemplate: 'Exclusion {actual} conflicts with mandatory coverage existence',
+  },
+  {
+    ruleCode: 'CYB-CON-004',
+    name: 'All pattern codes unique',
+    layer: 'CONSISTENCY',
+    appliesTo: 'proposal.clauses.patternCode',
+    dependsOn: ['CYB-TYPE-002'],
+    sourceCode: 'IRDAI-CYB-G-2024-S6.4',
+    errorTemplate: 'Duplicate coverage pattern code detected in proposal',
+  },
+
+  // LAYER 4: RULE_MATCH (5)
+  {
+    ruleCode: 'CYB-RM-001',
+    name: 'Mandatory coverages present',
+    layer: 'RULE_MATCH',
+    appliesTo: 'SMCyberDataBreachCov, SMCyberPrivacyLiabilityCov',
+    dependsOn: ['CYB-TYPE-002'],
+    sourceCode: 'IRDAI-CYB-G-2024-S4.1',
+    errorTemplate: 'Missing mandatory coverage: Data Breach and Privacy Liability required',
+  },
+  {
+    ruleCode: 'CYB-RM-002',
+    name: 'Mandatory exclusions present',
+    layer: 'RULE_MATCH',
+    appliesTo: 'War, PriorKnown, IntentionalActs, InfraFailure',
+    dependsOn: ['CYB-TYPE-002'],
+    sourceCode: 'IRDAI-CYB-G-2024-S4.2',
+    errorTemplate: 'Mandatory cyber exclusion missing from proposal clauses',
+  },
+  {
+    ruleCode: 'CYB-RM-003',
+    name: 'Extortion -> law enforcement notice',
+    layer: 'RULE_MATCH',
+    appliesTo: 'coverage[patternCode=SMCyberExtortionCov].conditions',
+    dependsOn: ['CYB-RNG-002'],
+    sourceCode: 'IRDAI-CYB-G-2024-S4.3',
+    errorTemplate: 'Ransom payment requires condition "law-enforcement-notification"',
+  },
+  {
+    ruleCode: 'CYB-RM-004',
+    name: 'Regulatory fines "where insurable"',
+    layer: 'RULE_MATCH',
+    appliesTo: 'coverage[patternCode=SMCyberRegulatoryFinesCov].conditions',
+    dependsOn: ['CYB-TYPE-002'],
+    sourceCode: 'IRDAI-CYB-G-2024-S4.4',
+    errorTemplate: 'Regulatory fines must include condition "where-insurable-by-law"',
+  },
+  {
+    ruleCode: 'CYB-RM-005',
+    name: 'CERT-In 6-hour reporting mandate',
+    layer: 'RULE_MATCH',
+    appliesTo: 'proposal.clauses.conditions',
+    dependsOn: ['CYB-RM-001'],
+    sourceCode: 'CERT-IN-DIR-2022-6HR',
+    errorTemplate: 'Cyber incidents must mandate reporting to CERT-In within 6 hours',
+  },
+
+  // LAYER 5: SOURCE (3)
+  {
+    ruleCode: 'CYB-SRC-001',
+    name: 'Citation presence check',
+    layer: 'SOURCE',
+    appliesTo: 'clause.citations',
+    dependsOn: [],
+    sourceCode: 'IRDAI-CYB-G-2024-S1.1',
+    errorTemplate: 'Clause has zero statutory or regulatory citations',
+  },
+  {
+    ruleCode: 'CYB-SRC-002',
+    name: 'Byte-exact SHA256 integrity',
+    layer: 'SOURCE',
+    appliesTo: 'citation.textSnippet',
+    dependsOn: ['CYB-SRC-001'],
+    sourceCode: 'IRDAI-CYB-G-2024-S1.2',
+    errorTemplate: 'Cited text snippet hash does not match regulatory authority corpus',
+  },
+  {
+    ruleCode: 'CYB-SRC-003',
+    name: 'Active & jurisdiction IN',
+    layer: 'SOURCE',
+    appliesTo: 'citation.sourceCode',
+    dependsOn: ['CYB-SRC-001'],
+    sourceCode: 'IRDAI-CYB-G-2024-S1.3',
+    errorTemplate: 'Cited statute is repealed or does not govern Indian jurisdiction',
+  },
+
+  // LAYER 6: GROUNDING (1)
+  {
+    ruleCode: 'CYB-GRD-001',
+    name: 'Prose summary numbers grounded',
+    layer: 'GROUNDING',
+    appliesTo: 'proposal.proseSummary',
+    dependsOn: ['CYB-RNG-001', 'CYB-RNG-002', 'CYB-CON-001'],
+    sourceCode: 'IRDAI-CYB-G-2024-S5.1',
+    errorTemplate: 'Prose text cites numbers that disagree with verified clause values',
+  },
+];
+
+export const RULES_MAP: Record<string, RuleDefinition> = RULES_CATALOG.reduce((acc, rule) => {
+  acc[rule.ruleCode] = rule;
+  return acc;
+}, {} as Record<string, RuleDefinition>);

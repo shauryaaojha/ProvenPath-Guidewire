@@ -1,0 +1,27 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# NEVER commit licensed Guidewire material (repo is public)
+pc-home/
+GW10/
+**/modules/configuration/generated/
+*.jar
+*.war
+*.gwp.bak
+
+# Build output
+build/
+.gradle/
+out/
+node_modules/
+.next/
+*.log
+vmreport.md
+
+# Embedded PostgreSQL data (scripts/run-local.*)
+.provenpath-pgdata/
+
+# Gradle wrapper jar is needed to build without an installed Gradle
+!backend/gradle/wrapper/gradle-wrapper.jar
