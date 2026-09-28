@@ -2,12 +2,13 @@
 FROM gradle:8.10-jdk11 AS build
 WORKDIR /src
 COPY backend/ backend/
-RUN cd backend && gradle :app:fatJar --no-daemon -q
+RUN cd backend && gradle :app:fatJar :pcmock:fatJar --no-daemon -q
 
 # Runtime needs a full JDK (not a JRE): the Gosu 1.18 runtime uses the jdk.compiler module.
 FROM eclipse-temurin:11-jdk
 WORKDIR /app
 COPY --from=build /src/backend/app/build/libs/provenpath-app.jar /app/provenpath-app.jar
+COPY --from=build /src/backend/pcmock/build/libs/provenpath-pcmock.jar /app/provenpath-pcmock.jar
 COPY rules /app/rules
 COPY fixtures /app/fixtures
 COPY eval /app/eval
