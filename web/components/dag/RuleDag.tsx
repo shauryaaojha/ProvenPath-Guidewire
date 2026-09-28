@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import {
   ReactFlow,
   Background,
@@ -9,23 +9,26 @@ import {
   Node,
   Edge,
   MarkerType,
+  useNodesState,
+  useEdgesState,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { CustomRuleNode, RuleNodeData } from './CustomRuleNode';
 import { RULES_CATALOG, RULE_LAYERS, RULES_MAP } from '@/lib/rules-catalog';
 import { NodeResult, NodeStatus, RuleDefinition } from '@/lib/contracts';
-import { ShieldCheck, Info, X } from 'lucide-react';
+import { ShieldCheck, BookOpen, X, Info } from 'lucide-react';
 
 interface RuleDagProps {
   nodesMap: Record<string, NodeResult>;
   onSelectClauseId?: (clauseId: string) => void;
+  isDark?: boolean;
 }
 
 const nodeTypes = {
   customRule: CustomRuleNode,
 };
 
-export function RuleDag({ nodesMap }: RuleDagProps) {
+export function RuleDag({ nodesMap, isDark = true }: RuleDagProps) {
   const [selectedRule, setSelectedRule] = useState<RuleDefinition | null>(null);
 
   const handleNodeClick = useCallback((ruleCode: string) => {
@@ -35,7 +38,7 @@ export function RuleDag({ nodesMap }: RuleDagProps) {
     }
   }, []);
 
-  // Compute graph nodes and edges
+  // Compute stable initial layout coordinates once
   const { initialNodes, initialEdges } = useMemo(() => {
     const layerIndices: Record<string, number> = {
       TYPE: 0,
@@ -58,16 +61,12 @@ export function RuleDag({ nodesMap }: RuleDagProps) {
     const nodes: Node<RuleNodeData>[] = [];
     const edges: Edge[] = [];
 
-    // Group rules by layer
     RULES_CATALOG.forEach(rule => {
       const colIdx = layerIndices[rule.layer] ?? 0;
       const rowIdx = layerCounters[rule.layer]++;
 
       const x = 40 + colIdx * 260;
       const y = 80 + rowIdx * 115;
-
-      const liveResult = nodesMap[rule.ruleCode];
-      const status: NodeStatus = liveResult ? liveResult.result : 'PENDING';
 
       nodes.push({
         id: rule.ruleCode,
@@ -78,29 +77,25 @@ export function RuleDag({ nodesMap }: RuleDagProps) {
           name: rule.name,
           layer: rule.layer,
           sourceCode: rule.sourceCode,
-          status,
-          expected: liveResult?.expected,
-          actual: liveResult?.actual,
-          reason: liveResult?.reason,
+          status: 'PENDING',
           onClickNode: handleNodeClick,
+          isDark,
         },
       });
 
-      // Construct edges from dependsOn
       rule.dependsOn.forEach(depRuleCode => {
-        const isFailed = liveResult?.result === 'FAILED';
         edges.push({
           id: `e-${depRuleCode}-${rule.ruleCode}`,
           source: depRuleCode,
           target: rule.ruleCode,
-          animated: status !== 'PENDING' && status !== 'SKIPPED',
+          animated: false,
           style: {
-            stroke: isFailed ? '#f43f5e' : status === 'PASSED' ? '#10b981' : '#475569',
-            strokeWidth: isFailed ? 2.5 : 1.5,
+            stroke: isDark ? '#334155' : '#cbd5e1',
+            strokeWidth: 1.5,
           },
           markerEnd: {
             type: MarkerType.ArrowClosed,
-            color: isFailed ? '#f43f5e' : status === 'PASSED' ? '#10b981' : '#475569',
+            color: isDark ? '#334155' : '#cbd5e1',
             width: 14,
             height: 14,
           },
@@ -109,111 +104,288 @@ export function RuleDag({ nodesMap }: RuleDagProps) {
     });
 
     return { initialNodes: nodes, initialEdges: edges };
-  }, [nodesMap, handleNodeClick]);
+  }, [handleNodeClick, isDark]);
+
+  // Use persistent React Flow node and edge state so nodes never disappear or reset
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+
+  // Dynamically update node status and edge illumination without resetting positions or viewport
+  useEffect(() => {
+    setNodes(nds =>
+      nds.map(node => {
+        const liveResult = nodesMap[node.id];
+        const status: NodeStatus = liveResult ? liveResult.result : 'PENDING';
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            status,
+            expected: liveResult?.expected,
+            actual: liveResult?.actual,
+            reason: liveResult?.reason,
+            onClickNode: handleNodeClick,
+            isDark,
+          },
+        };
+      })
+    );
+
+    setEdges(eds =>
+      eds.map(edge => {
+        const targetRule = edge.target;
+        const liveResult = nodesMap[targetRule];
+        const status: NodeStatus = liveResult ? liveResult.result : 'PENDING';
+        const isFailed = status === 'FAILED';
+        const isPassed = status === 'PASSED';
+        const strokeColor = isFailed
+          ? '#f43f5e'
+          : isPassed
+          ? isDark
+            ? '#ffffff'
+            : '#18181b'
+          : isDark
+          ? '#334155'
+          : '#cbd5e1';
+
+        return {
+          ...edge,
+          animated: status !== 'PENDING' && status !== 'SKIPPED',
+          style: {
+            stroke: strokeColor,
+            strokeWidth: isFailed ? 2.5 : isPassed ? 1.5 : 1,
+          },
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            color: strokeColor,
+            width: 12,
+            height: 12,
+          },
+        };
+      })
+    );
+  }, [nodesMap, handleNodeClick, isDark, setNodes, setEdges]);
 
   const activeResult = selectedRule ? nodesMap[selectedRule.ruleCode] : null;
 
   return (
-    <div className="relative w-full h-full flex flex-col bg-slate-950 border border-slate-800 rounded-xl overflow-hidden shadow-2xl">
-      {/* Top Layer Header Strip */}
-      <div className="flex items-center justify-between px-4 py-2.5 bg-slate-900/90 border-b border-slate-800 text-xs backdrop-blur-md z-10">
-        <div className="flex items-center gap-2 text-slate-300 font-semibold tracking-wide">
-          <ShieldCheck className="w-4 h-4 text-emerald-400" />
+    <div
+      className={`relative w-full h-full flex flex-col rounded-xl overflow-hidden shadow-sm border transition-colors ${
+        isDark
+          ? 'bg-[#050507] border-white/10 text-white'
+          : 'bg-white border-neutral-200 text-neutral-900'
+      }`}
+    >
+      {/* Top Layer Header Strip (Monochrome) */}
+      <div
+        className={`flex items-center justify-between px-4 py-2.5 border-b text-xs backdrop-blur-md z-10 transition-colors ${
+          isDark
+            ? 'bg-neutral-950/80 border-white/10'
+            : 'bg-neutral-50/90 border-neutral-200'
+        }`}
+      >
+        <div className="flex items-center gap-2 font-mono font-semibold tracking-wide">
+          <ShieldCheck className="w-4 h-4" />
           <span>DETERMINISTIC GOSU VERIFICATION GRAPH (23 RULES)</span>
         </div>
-        <div className="flex items-center gap-4 text-[11px] text-slate-400">
+        <div
+          className={`flex items-center gap-4 text-[11px] font-mono ${
+            isDark ? 'text-neutral-400' : 'text-neutral-500'
+          }`}
+        >
           <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]" /> Passed
+            <span
+              className={`w-2.5 h-2.5 rounded-full ${
+                isDark ? 'bg-white shadow-[0_0_8px_rgba(255,255,255,0.7)]' : 'bg-black'
+              }`}
+            />{' '}
+            Passed
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]" /> Failed
+            <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]" />{' '}
+            Failed
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-slate-700" /> Skipped / Pending
+            <span
+              className={`w-2.5 h-2.5 rounded-full ${
+                isDark ? 'bg-neutral-700' : 'bg-neutral-300'
+              }`}
+            />{' '}
+            Pending
           </span>
         </div>
       </div>
 
       {/* Layer column names pinned at top */}
-      <div className="grid grid-cols-6 gap-2 px-6 py-2 bg-slate-900/40 border-b border-slate-800/60 text-center text-[11px] font-mono font-medium text-slate-400 z-10">
+      <div
+        className={`grid grid-cols-6 gap-2 px-6 py-2 border-b text-center text-[11px] font-mono font-medium z-10 transition-colors ${
+          isDark
+            ? 'bg-neutral-950/40 border-white/5 text-neutral-400'
+            : 'bg-neutral-100/60 border-neutral-200 text-neutral-600'
+        }`}
+      >
         {RULE_LAYERS.map(l => (
-          <div key={l.layer} className="px-2 py-1 rounded bg-slate-800/50 border border-slate-700/50 truncate">
-            <span style={{ color: l.color }}>{l.label}</span>
+          <div
+            key={l.layer}
+            className={`px-2 py-1 rounded border truncate ${
+              isDark
+                ? 'bg-white/5 border-white/10 text-neutral-300'
+                : 'bg-white border-neutral-200 text-neutral-700 shadow-sm'
+            }`}
+          >
+            {l.label}
           </div>
         ))}
       </div>
 
-      {/* React Flow Canvas */}
-      <div className="flex-1 w-full h-full">
+      {/* React Flow Canvas (Persistent Node Graph - NEVER DISAPPEARS) */}
+      <div className="relative flex-1 w-full min-h-0">
         <ReactFlow
-          nodes={initialNodes}
-          edges={initialEdges}
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
           nodeTypes={nodeTypes}
           fitView
           fitViewOptions={{ padding: 0.15 }}
-          minZoom={0.3}
+          minZoom={0.25}
           maxZoom={1.5}
           proOptions={{ hideAttribution: true }}
-          className="bg-slate-950"
+          className="w-full h-full"
         >
-          <Background color="#1e293b" gap={20} size={1} />
-          <Controls className="!bg-slate-900 !border-slate-800 !text-slate-300" />
+          <Background
+            color={isDark ? '#222225' : '#cbd5e1'}
+            gap={20}
+            size={1}
+          />
+          <Controls
+            className={`!rounded-lg overflow-hidden border ${
+              isDark
+                ? '!bg-neutral-900 !border-neutral-800 !text-white'
+                : '!bg-white !border-neutral-300 !text-black shadow-sm'
+            }`}
+          />
           <MiniMap
-            nodeStrokeColor="#475569"
-            nodeColor="#1e293b"
-            maskColor="rgba(15, 23, 42, 0.7)"
-            className="!bg-slate-900 !border-slate-800"
+            nodeStrokeColor={isDark ? '#555555' : '#aaaaaa'}
+            nodeColor={isDark ? '#1a1a1a' : '#eeeeee'}
+            maskColor={isDark ? 'rgba(0, 0, 0, 0.8)' : 'rgba(255, 255, 255, 0.8)'}
+            className={`!rounded-lg overflow-hidden border ${
+              isDark ? '!bg-neutral-950 !border-neutral-800' : '!bg-white !border-neutral-300'
+            }`}
           />
         </ReactFlow>
       </div>
 
       {/* Rule Detail Modal */}
       {selectedRule && (
-        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-30 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-lg w-full p-5 shadow-2xl text-slate-200">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm z-30 flex items-center justify-center p-4">
+          <div
+            className={`border rounded-xl max-w-lg w-full p-5 shadow-2xl animate-in fade-in zoom-in-95 duration-200 ${
+              isDark
+                ? 'bg-neutral-950 border-neutral-700 text-white'
+                : 'bg-white border-neutral-300 text-neutral-900'
+            }`}
+          >
+            <div
+              className={`flex items-center justify-between border-b pb-3 mb-4 ${
+                isDark ? 'border-neutral-800' : 'border-neutral-200'
+              }`}
+            >
               <div className="flex items-center gap-2">
-                <span className="font-mono text-sm font-bold text-cyan-400">
+                <span className="font-mono text-sm font-bold">
                   {selectedRule.ruleCode}
                 </span>
-                <span className="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                <span
+                  className={`text-xs px-2 py-0.5 rounded border font-mono ${
+                    isDark
+                      ? 'bg-white/10 text-white border-white/20'
+                      : 'bg-neutral-100 text-neutral-800 border-neutral-300'
+                  }`}
+                >
                   {selectedRule.layer}
                 </span>
               </div>
               <button
                 onClick={() => setSelectedRule(null)}
-                className="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-800"
+                className={`p-1 rounded-full transition-colors cursor-pointer ${
+                  isDark ? 'hover:bg-white/10 text-neutral-400 hover:text-white' : 'hover:bg-neutral-100 text-neutral-500 hover:text-black'
+                }`}
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
+            <div className="space-y-4 text-xs">
               <div>
-                <label className="text-slate-500 font-mono">RULE NAME</label>
-                <div className="text-sm font-semibold text-slate-100">{selectedRule.name}</div>
+                <label
+                  className={`text-[10px] font-mono uppercase tracking-wider font-semibold ${
+                    isDark ? 'text-neutral-400' : 'text-neutral-500'
+                  }`}
+                >
+                  STATUTORY CLAUSE NAME
+                </label>
+                <div className="text-sm font-semibold mt-1">
+                  {selectedRule.name}
+                </div>
               </div>
 
               <div>
-                <label className="text-slate-500 font-mono">REGULATORY SOURCE CITATION</label>
-                <div className="text-slate-300 font-mono bg-slate-950/80 p-2 rounded border border-slate-800">
+                <label
+                  className={`text-[10px] font-mono uppercase tracking-wider flex items-center gap-1 font-semibold ${
+                    isDark ? 'text-neutral-400' : 'text-neutral-500'
+                  }`}
+                >
+                  <BookOpen className="w-3.5 h-3.5" /> IRDAI AUTHORITY CITATION
+                </label>
+                <div
+                  className={`font-mono p-3 rounded-lg border mt-1 text-[11px] ${
+                    isDark
+                      ? 'bg-white/5 border-white/10 text-neutral-200'
+                      : 'bg-neutral-50 border-neutral-200 text-neutral-800'
+                  }`}
+                >
                   {selectedRule.sourceCode}
                 </div>
               </div>
 
               <div>
-                <label className="text-slate-500 font-mono">APPLIES TO TARGET</label>
-                <div className="text-slate-300 font-mono bg-slate-950/80 p-2 rounded border border-slate-800">
+                <label
+                  className={`text-[10px] font-mono uppercase tracking-wider font-semibold ${
+                    isDark ? 'text-neutral-400' : 'text-neutral-500'
+                  }`}
+                >
+                  APPLIES TO TARGET COV PATTERN
+                </label>
+                <div
+                  className={`font-mono p-3 rounded-lg border mt-1 text-[11px] ${
+                    isDark
+                      ? 'bg-white/5 border-white/10 text-neutral-200'
+                      : 'bg-neutral-50 border-neutral-200 text-neutral-800'
+                  }`}
+                >
                   {selectedRule.appliesTo}
                 </div>
               </div>
 
               {selectedRule.dependsOn.length > 0 && (
                 <div>
-                  <label className="text-slate-500 font-mono">DEPENDS ON RULES</label>
-                  <div className="flex flex-wrap gap-1.5 mt-1">
+                  <label
+                    className={`text-[10px] font-mono uppercase tracking-wider font-semibold ${
+                      isDark ? 'text-neutral-400' : 'text-neutral-500'
+                    }`}
+                  >
+                    DEPENDENT UPON RULES
+                  </label>
+                  <div className="flex flex-wrap gap-1.5 mt-1.5">
                     {selectedRule.dependsOn.map(dep => (
-                      <span key={dep} className="px-2 py-0.5 rounded bg-slate-800 text-cyan-300 font-mono text-[11px] border border-slate-700">
+                      <span
+                        key={dep}
+                        className={`px-2 py-0.5 rounded border font-mono text-[11px] ${
+                          isDark
+                            ? 'bg-white/5 border-white/10 text-white'
+                            : 'bg-neutral-100 border-neutral-300 text-neutral-800'
+                        }`}
+                      >
                         {dep}
                       </span>
                     ))}
@@ -222,37 +394,76 @@ export function RuleDag({ nodesMap }: RuleDagProps) {
               )}
 
               {activeResult ? (
-                <div className="pt-3 border-t border-slate-800">
-                  <label className="text-slate-500 font-mono">VERDICT EVALUATION</label>
-                  <div className="mt-1 p-2.5 rounded bg-slate-950/90 border border-slate-800 space-y-1 font-mono">
+                <div
+                  className={`pt-3 border-t ${
+                    isDark ? 'border-neutral-800' : 'border-neutral-200'
+                  }`}
+                >
+                  <label
+                    className={`text-[10px] font-mono uppercase tracking-wider font-semibold ${
+                      isDark ? 'text-neutral-400' : 'text-neutral-500'
+                    }`}
+                  >
+                    DETERMINISTIC EVALUATION
+                  </label>
+                  <div
+                    className={`mt-1.5 p-3 rounded-lg border space-y-1.5 font-mono text-[11px] ${
+                      isDark
+                        ? 'bg-white/5 border-white/10'
+                        : 'bg-neutral-50 border-neutral-200'
+                    }`}
+                  >
                     <div className="flex justify-between">
-                      <span className="text-slate-400">Result:</span>
-                      <span className={activeResult.result === 'PASSED' ? 'text-emerald-400 font-bold' : activeResult.result === 'FAILED' ? 'text-rose-400 font-bold' : 'text-slate-400'}>
+                      <span className={isDark ? 'text-neutral-400' : 'text-neutral-500'}>
+                        Result:
+                      </span>
+                      <span
+                        className={
+                          activeResult.result === 'PASSED'
+                            ? 'font-bold'
+                            : activeResult.result === 'FAILED'
+                            ? 'text-rose-500 font-bold'
+                            : ''
+                        }
+                      >
                         {activeResult.result}
                       </span>
                     </div>
                     {activeResult.expected && (
                       <div className="flex justify-between">
-                        <span className="text-slate-400">Expected:</span>
-                        <span className="text-slate-200">{activeResult.expected}</span>
+                        <span className={isDark ? 'text-neutral-400' : 'text-neutral-500'}>
+                          Expected:
+                        </span>
+                        <span>{activeResult.expected}</span>
                       </div>
                     )}
                     {activeResult.actual && (
                       <div className="flex justify-between">
-                        <span className="text-slate-400">Actual:</span>
-                        <span className="text-slate-200">{activeResult.actual}</span>
+                        <span className={isDark ? 'text-neutral-400' : 'text-neutral-500'}>
+                          Actual:
+                        </span>
+                        <span className="font-semibold">{activeResult.actual}</span>
                       </div>
                     )}
                     {activeResult.reason && (
-                      <div className="pt-1 text-slate-300 text-[11px] font-sans italic">
+                      <div
+                        className={`pt-1.5 border-t text-xs italic ${
+                          isDark ? 'border-white/10 text-neutral-300' : 'border-neutral-200 text-neutral-600'
+                        }`}
+                      >
                         &quot;{activeResult.reason}&quot;
                       </div>
                     )}
                   </div>
                 </div>
               ) : (
-                <div className="pt-2 text-slate-500 italic flex items-center gap-1.5">
-                  <Info className="w-3.5 h-3.5" /> Node has not evaluated yet (PENDING in live stream).
+                <div
+                  className={`pt-2 italic flex items-center gap-1.5 ${
+                    isDark ? 'text-neutral-400' : 'text-neutral-500'
+                  }`}
+                >
+                  <Info className="w-3.5 h-3.5" />
+                  Node awaiting evaluation in the active docket stream.
                 </div>
               )}
             </div>
@@ -260,9 +471,13 @@ export function RuleDag({ nodesMap }: RuleDagProps) {
             <div className="mt-5 flex justify-end">
               <button
                 onClick={() => setSelectedRule(null)}
-                className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium"
+                className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
+                  isDark
+                    ? 'bg-white/10 hover:bg-white/20 border-white/20 text-white'
+                    : 'bg-neutral-100 hover:bg-neutral-200 border-neutral-300 text-black'
+                }`}
               >
-                Close
+                Close Folio
               </button>
             </div>
           </div>

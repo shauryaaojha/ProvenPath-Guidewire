@@ -6,9 +6,10 @@ import { Wrench, ChevronDown, ChevronRight, Copy, Check } from 'lucide-react';
 
 interface ToolsPanelProps {
   toolCalls: ToolCallItem[];
+  isDark?: boolean;
 }
 
-export function ToolsPanel({ toolCalls }: ToolsPanelProps) {
+export function ToolsPanel({ toolCalls, isDark = true }: ToolsPanelProps) {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(0);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
@@ -23,15 +24,33 @@ export function ToolsPanel({ toolCalls }: ToolsPanelProps) {
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-950 border border-slate-800 rounded-xl overflow-hidden shadow-2xl">
-      {/* Header */}
-      <div className="px-3.5 py-2.5 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between">
+    <div
+      className={`flex flex-col h-full rounded-xl overflow-hidden shadow-sm border transition-colors ${
+        isDark
+          ? 'bg-[#050507] border-white/10 text-white'
+          : 'bg-white border-neutral-200 text-neutral-900'
+      }`}
+    >
+      {/* Header (Monochrome) */}
+      <div
+        className={`px-3.5 py-2.5 border-b flex items-center justify-between transition-colors ${
+          isDark
+            ? 'bg-neutral-950/80 border-white/10'
+            : 'bg-neutral-50/90 border-neutral-200'
+        }`}
+      >
         <div className="flex items-center gap-2">
-          <Wrench className="w-4 h-4 text-sky-400" />
-          <span className="text-xs font-semibold text-slate-200 tracking-wider font-mono">
+          <Wrench className="w-4 h-4" />
+          <span className="text-xs font-semibold tracking-wider font-mono uppercase">
             TOOLS INSPECTOR
           </span>
-          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 border border-slate-700">
+          <span
+            className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+              isDark
+                ? 'bg-white/5 text-neutral-300 border-white/10'
+                : 'bg-neutral-100 text-neutral-700 border-neutral-200'
+            }`}
+          >
             {toolCalls.length}
           </span>
         </div>
@@ -40,12 +59,14 @@ export function ToolsPanel({ toolCalls }: ToolsPanelProps) {
       {/* Tool Call List */}
       <div className="flex-1 overflow-y-auto p-2.5 space-y-2 font-mono text-xs">
         {toolCalls.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-slate-500 text-center p-6 space-y-2">
-            <Wrench className="w-8 h-8 text-slate-700 animate-pulse" />
+          <div
+            className={`h-full flex flex-col items-center justify-center text-center p-6 space-y-2 ${
+              isDark ? 'text-neutral-500' : 'text-neutral-400'
+            }`}
+          >
+            <Wrench className="w-8 h-8 animate-pulse" />
             <div className="text-xs">No tool calls recorded yet</div>
-            <div className="text-[10px] text-slate-600">
-              Planner tool invocations will appear here
-            </div>
+            <div className="text-[10px]">Planner tool invocations will appear here</div>
           </div>
         ) : (
           toolCalls.map((item, idx) => {
@@ -54,19 +75,25 @@ export function ToolsPanel({ toolCalls }: ToolsPanelProps) {
             return (
               <div
                 key={`${item.seq}-${item.tool}`}
-                className="rounded-lg border border-slate-800 bg-slate-900/50 overflow-hidden"
+                className={`rounded-lg border overflow-hidden transition-all ${
+                  isDark
+                    ? 'border-white/[0.08] bg-white/[0.02]'
+                    : 'border-neutral-200 bg-neutral-50'
+                }`}
               >
                 <div
                   onClick={() => toggleExpand(idx)}
-                  className="flex items-center justify-between p-2.5 cursor-pointer hover:bg-slate-800/60 transition-colors"
+                  className={`flex items-center justify-between p-2.5 cursor-pointer transition-colors ${
+                    isDark ? 'hover:bg-white/[0.05]' : 'hover:bg-neutral-100'
+                  }`}
                 >
                   <div className="flex items-center gap-2">
                     {isExpanded ? (
-                      <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                      <ChevronDown className="w-3.5 h-3.5" />
                     ) : (
-                      <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                      <ChevronRight className="w-3.5 h-3.5 text-neutral-400" />
                     )}
-                    <span className="font-semibold text-sky-300 font-mono text-xs">
+                    <span className="font-semibold font-mono text-xs">
                       {item.tool}
                     </span>
                   </div>
@@ -75,8 +102,12 @@ export function ToolsPanel({ toolCalls }: ToolsPanelProps) {
                     <span
                       className={`text-[9px] px-1.5 py-0.5 rounded border font-mono ${
                         item.result
-                          ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800/60'
-                          : 'bg-amber-950/60 text-amber-400 border-amber-800/60'
+                          ? isDark
+                            ? 'bg-white/10 text-white border-white/20'
+                            : 'bg-black text-white border-black font-bold'
+                          : isDark
+                          ? 'bg-white/5 text-neutral-400 border-white/10'
+                          : 'bg-neutral-200 text-neutral-700 border-neutral-300'
                       }`}
                     >
                       {item.result ? 'COMPLETED' : 'CALLED'}
@@ -89,7 +120,11 @@ export function ToolsPanel({ toolCalls }: ToolsPanelProps) {
                           idx
                         );
                       }}
-                      className="p-1 text-slate-500 hover:text-slate-300 rounded hover:bg-slate-800"
+                      className={`p-1 rounded cursor-pointer transition-colors ${
+                        isDark
+                          ? 'text-neutral-400 hover:text-white hover:bg-white/10'
+                          : 'text-neutral-500 hover:text-black hover:bg-neutral-200'
+                      }`}
                       title="Copy JSON"
                     >
                       {copiedIndex === idx ? (
@@ -102,13 +137,29 @@ export function ToolsPanel({ toolCalls }: ToolsPanelProps) {
                 </div>
 
                 {isExpanded && (
-                  <div className="p-2.5 pt-0 border-t border-slate-800/80 bg-slate-950/70 space-y-2">
+                  <div
+                    className={`p-2.5 pt-0 border-t space-y-2 ${
+                      isDark
+                        ? 'border-white/5 bg-black/50'
+                        : 'border-neutral-200 bg-white'
+                    }`}
+                  >
                     {item.args && (
                       <div>
-                        <div className="text-[10px] text-slate-500 font-semibold mb-1">
+                        <div
+                          className={`text-[10px] font-semibold mb-1 ${
+                            isDark ? 'text-neutral-400' : 'text-neutral-500'
+                          }`}
+                        >
                           ARGUMENTS
                         </div>
-                        <pre className="p-2 rounded bg-slate-900/90 border border-slate-800 text-[10px] text-slate-300 overflow-x-auto">
+                        <pre
+                          className={`p-2 rounded border text-[10px] overflow-x-auto ${
+                            isDark
+                              ? 'bg-black border-white/10 text-neutral-300'
+                              : 'bg-neutral-50 border-neutral-200 text-neutral-800'
+                          }`}
+                        >
                           {JSON.stringify(item.args, null, 2)}
                         </pre>
                       </div>
@@ -116,10 +167,20 @@ export function ToolsPanel({ toolCalls }: ToolsPanelProps) {
 
                     {item.result && (
                       <div>
-                        <div className="text-[10px] text-emerald-500/80 font-semibold mb-1">
+                        <div
+                          className={`text-[10px] font-semibold mb-1 ${
+                            isDark ? 'text-neutral-300' : 'text-neutral-700'
+                          }`}
+                        >
                           RESULT
                         </div>
-                        <pre className="p-2 rounded bg-slate-900/90 border border-slate-800 text-[10px] text-emerald-300/90 overflow-x-auto">
+                        <pre
+                          className={`p-2 rounded border text-[10px] overflow-x-auto ${
+                            isDark
+                              ? 'bg-black border-white/10 text-white'
+                              : 'bg-neutral-50 border-neutral-200 text-neutral-900 font-medium'
+                          }`}
+                        >
                           {JSON.stringify(item.result, null, 2)}
                         </pre>
                       </div>

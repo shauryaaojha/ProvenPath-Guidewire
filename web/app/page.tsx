@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useExecutionStream } from '@/lib/useExecutionStream';
+import { useTheme } from '@/lib/useTheme';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { RuleDag } from '@/components/dag/RuleDag';
@@ -16,6 +17,8 @@ import { PitchDeckModal } from '@/components/deck/PitchDeckModal';
 import { GateBlockedPayload } from '@/lib/contracts';
 
 export default function MissionControlPage() {
+  const { isDark, toggleTheme } = useTheme();
+
   const [promptText, setPromptText] = useState<string>(
     'Cyber insurance for Indian startups, up to ₹50L coverage'
   );
@@ -58,11 +61,13 @@ export default function MissionControlPage() {
   const effectiveBlockedData = customBlockedData || (overallStatus === 'blocked' ? blockedData : null);
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-950 text-slate-100 font-sans select-none">
+    <div
+      className={`flex flex-col h-screen w-screen overflow-hidden font-sans select-none transition-colors ${
+        isDark ? 'bg-[#050507] text-white' : 'bg-[#f8fafc] text-neutral-900'
+      }`}
+    >
       {/* Top Command Bar */}
       <Navbar
-        promptText={promptText}
-        setPromptText={setPromptText}
         overallStatus={overallStatus}
         isStreaming={isStreaming}
         speed={speed}
@@ -73,13 +78,53 @@ export default function MissionControlPage() {
         onOpenPitchDeck={() => setIsPitchDeckOpen(true)}
         onOpenDeploy={() => setIsDeployOpen(true)}
         onTriggerTamper={handleTamperBlocked}
+        isDark={isDark}
+        onToggleTheme={toggleTheme}
       />
+
+      {/* Symmetrical Proposal Prompt Bar (Left edge begins in straight line with Trace Timeline, right edge ends at Tools Inspector) */}
+      <div className="px-3 pt-3 shrink-0">
+        <div
+          className={`flex items-center gap-2 border rounded-xl p-2 transition-colors ${
+            isDark
+              ? 'bg-neutral-950/80 border-white/10 text-white'
+              : 'bg-white border-neutral-200 text-neutral-900 shadow-sm'
+          }`}
+        >
+          <span
+            className={`text-[10px] font-mono font-bold px-2 uppercase tracking-wider shrink-0 ${
+              isDark ? 'text-neutral-400' : 'text-neutral-500'
+            }`}
+          >
+            PROPOSAL PROMPT:
+          </span>
+          <input
+            type="text"
+            value={promptText}
+            onChange={e => setPromptText(e.target.value)}
+            placeholder="Enter insurance product prompt (e.g. Cyber insurance for Indian startups)..."
+            className="flex-1 bg-transparent text-xs font-mono outline-none px-1"
+          />
+          <button
+            onClick={() =>
+              setPromptText('Cyber insurance for Indian startups, up to ₹50L coverage')
+            }
+            className={`text-[10px] font-mono px-3 py-1 rounded border whitespace-nowrap cursor-pointer transition-colors ${
+              isDark
+                ? 'bg-white/10 hover:bg-white/20 text-white border-white/20'
+                : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-900 border-neutral-300 font-medium'
+            }`}
+          >
+            Preset Demo (₹50L Cyber)
+          </button>
+        </div>
+      </div>
 
       {/* Main 3-Column Mission Control Grid */}
       <main className="flex-1 grid grid-cols-12 gap-3 p-3 min-h-0 overflow-hidden">
         {/* Left Column: Trace Timeline (3 cols) */}
         <section className="col-span-3 h-full min-h-0 flex flex-col">
-          <TraceTimeline events={events} />
+          <TraceTimeline events={events} isDark={isDark} />
         </section>
 
         {/* Center Column: Interactive 23-Node Rule DAG (6 cols) */}
@@ -87,12 +132,13 @@ export default function MissionControlPage() {
           <RuleDag
             nodesMap={nodesMap}
             onSelectClauseId={id => setSelectedClauseId(id)}
+            isDark={isDark}
           />
         </section>
 
         {/* Right Column: Tools Panel & Inspection (3 cols) */}
         <section className="col-span-3 h-full min-h-0 flex flex-col">
-          <ToolsPanel toolCalls={toolCalls} />
+          <ToolsPanel toolCalls={toolCalls} isDark={isDark} />
         </section>
       </main>
 
@@ -100,6 +146,7 @@ export default function MissionControlPage() {
       <Footer
         currentIteration={currentIteration}
         nodeStats={nodeStatusSummary}
+        isDark={isDark}
       />
 
       {/* Interactive Gated Drawers & Dialogs */}
@@ -115,6 +162,7 @@ export default function MissionControlPage() {
         <ReviewerPanel
           reviewData={reviewData}
           onDeployTrigger={() => setIsDeployOpen(true)}
+          isDark={isDark}
         />
       )}
 
@@ -137,13 +185,13 @@ export default function MissionControlPage() {
         onClose={() => setSelectedClauseId(null)}
       />
 
-      {/* 5. Metrics & Assurance Panel */}
+      {/* 5. Metrics & Assurance Panel (Charts & vector graphics preserved) */}
       <MetricsPanel
         isOpen={isMetricsOpen}
         onClose={() => setIsMetricsOpen(false)}
       />
 
-      {/* 6. Pitch Deck Modal */}
+      {/* 6. Pitch Deck Modal (Vector slides & diagrams preserved) */}
       <PitchDeckModal
         isOpen={isPitchDeckOpen}
         onClose={() => setIsPitchDeckOpen(false)}

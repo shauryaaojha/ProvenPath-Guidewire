@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import confetti from 'canvas-confetti';
+
 import {
   Server,
   ExternalLink,
@@ -48,17 +48,7 @@ export function DeployPanel({
   const [copied, setCopied] = useState<boolean>(false);
   const pcUrl = process.env.NEXT_PUBLIC_PC_URL || 'http://localhost:8180/pc';
 
-  // Trigger celebration confetti on pc.verified
-  useEffect(() => {
-    if (pcStage === 'verified') {
-      confetti({
-        particleCount: 80,
-        spread: 70,
-        origin: { y: 0.6 },
-        colors: ['#06b6d4', '#10b981', '#3b82f6'],
-      });
-    }
-  }, [pcStage]);
+
 
   if (!isOpen) return null;
 

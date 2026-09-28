@@ -7,15 +7,16 @@ import {
   ShieldCheck,
   CheckCircle2,
   XCircle,
-  FileCheck,
   ChevronRight,
-  Send,
+  X,
 } from 'lucide-react';
 
 interface ReviewerPanelProps {
   reviewData: ReviewRequestedPayload | null;
   onDecided?: (decision: 'approved' | 'rejected', reviewer: string, comment?: string) => void;
   onDeployTrigger?: () => void;
+  onDismiss?: () => void;
+  isDark?: boolean;
 }
 
 const SAMPLE_CLAUSES = [
@@ -70,6 +71,8 @@ export function ReviewerPanel({
   reviewData,
   onDecided,
   onDeployTrigger,
+  onDismiss,
+  isDark = true,
 }: ReviewerPanelProps) {
   const [selectedReviewer, setSelectedReviewer] = useState<string>(
     'A. Mehta — Compliance Reviewer'
@@ -78,6 +81,7 @@ export function ReviewerPanel({
   const [rejectComment, setRejectComment] = useState<string>('');
   const [decisionState, setDecisionState] = useState<'idle' | 'approved' | 'rejected'>('idle');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [isDismissed, setIsDismissed] = useState<boolean>(false);
 
   const handleApprove = async () => {
     setIsSubmitting(true);
@@ -123,46 +127,109 @@ export function ReviewerPanel({
     }
   };
 
+  const handleClose = () => {
+    setIsDismissed(true);
+    onDismiss?.();
+  };
+
+  if (isDismissed) return null;
   if (!reviewData && decisionState === 'idle') return null;
 
   return (
-    <div className="fixed inset-0 bg-black/75 backdrop-blur-md z-40 flex items-center justify-center p-4">
-      <div className="bg-slate-950 border border-slate-700 rounded-2xl max-w-2xl w-full p-6 shadow-[0_0_60px_rgba(0,0,0,0.8)] text-slate-200">
+    <div
+      onClick={handleClose}
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 flex items-center justify-center p-4 animate-in fade-in duration-200"
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        className={`border rounded-2xl max-w-2xl w-full p-6 shadow-2xl relative transition-colors ${
+          isDark
+            ? 'bg-neutral-950 border-neutral-700 text-white shadow-[0_0_60px_rgba(0,0,0,0.8)]'
+            : 'bg-white border-neutral-300 text-neutral-900 shadow-xl'
+        }`}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-4">
+        <div
+          className={`flex items-center justify-between border-b pb-4 mb-4 ${
+            isDark ? 'border-neutral-800' : 'border-neutral-200'
+          }`}
+        >
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-amber-950/80 border border-amber-600/60 text-amber-400">
+            <div
+              className={`p-2.5 rounded-xl border ${
+                isDark ? 'bg-white/10 border-white/20 text-white' : 'bg-neutral-100 border-neutral-300 text-black'
+              }`}
+            >
               <UserCheck className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
+              <h2 className="text-base font-bold flex items-center gap-2">
                 HUMAN COMPLIANCE GATE (GATE 2)
               </h2>
-              <p className="text-xs text-slate-400 font-mono">
+              <p
+                className={`text-xs font-mono ${
+                  isDark ? 'text-neutral-400' : 'text-neutral-500'
+                }`}
+              >
                 Mandatory human review prior to Guidewire PolicyCenter export
               </p>
             </div>
           </div>
-          <span className="text-[11px] font-mono px-2.5 py-1 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800 flex items-center gap-1.5">
-            <ShieldCheck className="w-3.5 h-3.5" />
-            Rule Engine: 100% Passed
-          </span>
+          <div className="flex items-center gap-2">
+            <span
+              className={`text-[11px] font-mono px-2.5 py-1 rounded-full border flex items-center gap-1.5 font-bold ${
+                isDark
+                  ? 'bg-white/10 text-white border-white/20'
+                  : 'bg-neutral-100 text-black border-neutral-300'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              Engine: 100% Passed
+            </span>
+            <button
+              onClick={handleClose}
+              className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                isDark
+                  ? 'border-white/10 hover:bg-white/10 text-neutral-400 hover:text-white'
+                  : 'border-neutral-200 hover:bg-neutral-100 text-neutral-500 hover:text-black'
+              }`}
+              title="Close panel to view graph"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Hashes Banner */}
         <div className="grid grid-cols-2 gap-3 mb-4 text-[11px] font-mono">
-          <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
-            <div className="text-slate-500 mb-0.5">VERDICT HASH</div>
-            <div className="text-emerald-400 font-bold truncate">
+          <div
+            className={`p-2.5 rounded-lg border ${
+              isDark ? 'bg-neutral-900 border-neutral-800' : 'bg-neutral-50 border-neutral-200'
+            }`}
+          >
+            <div className={isDark ? 'text-neutral-500 mb-0.5' : 'text-neutral-400 mb-0.5'}>
+              VERDICT HASH
+            </div>
+            <div className="font-bold truncate">
               {reviewData?.verdictHash || 'bd62e7b420e60b3871632bd3a73ff191af00c23b91893474fb509680e9393683'}
             </div>
           </div>
-          <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
-            <div className="text-slate-500 mb-0.5">DESIGNATED REVIEWER</div>
+          <div
+            className={`p-2.5 rounded-lg border ${
+              isDark ? 'bg-neutral-900 border-neutral-800' : 'bg-neutral-50 border-neutral-200'
+            }`}
+          >
+            <div className={isDark ? 'text-neutral-500 mb-0.5' : 'text-neutral-400 mb-0.5'}>
+              DESIGNATED REVIEWER
+            </div>
             <select
               value={selectedReviewer}
               onChange={e => setSelectedReviewer(e.target.value)}
-              className="w-full bg-slate-950 text-cyan-300 font-medium rounded border border-slate-700 p-1 text-xs outline-none"
+              className={`w-full font-medium rounded border p-1 text-xs outline-none ${
+                isDark
+                  ? 'bg-neutral-950 text-white border-neutral-700'
+                  : 'bg-white text-neutral-900 border-neutral-300'
+              }`}
             >
               <option value="A. Mehta — Compliance Reviewer">
                 A. Mehta — Compliance Reviewer (Legal & Underwriting)
@@ -179,7 +246,11 @@ export function ReviewerPanel({
 
         {/* Verified Clause List */}
         <div className="mb-5">
-          <div className="flex items-center justify-between text-xs text-slate-400 font-mono mb-2">
+          <div
+            className={`flex items-center justify-between text-xs font-mono mb-2 ${
+              isDark ? 'text-neutral-400' : 'text-neutral-500'
+            }`}
+          >
             <span>PROPOSED PRODUCT CLAUSES & STATUTE PROVENANCE</span>
             <span>5 Approved / 0 Blocked</span>
           </div>
@@ -187,20 +258,26 @@ export function ReviewerPanel({
             {SAMPLE_CLAUSES.map(clause => (
               <div
                 key={clause.clauseId}
-                className="flex items-center justify-between p-2.5 rounded-lg bg-slate-900/60 border border-slate-800 text-xs font-mono"
+                className={`flex items-center justify-between p-2.5 rounded-lg border text-xs font-mono ${
+                  isDark
+                    ? 'bg-white/[0.02] border-white/10'
+                    : 'bg-neutral-50 border-neutral-200'
+                }`}
               >
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
                   <div>
-                    <div className="text-slate-200 font-semibold">{clause.name}</div>
-                    <div className="text-[10px] text-slate-400">
+                    <div className="font-semibold">{clause.name}</div>
+                    <div className={`text-[10px] ${isDark ? 'text-neutral-400' : 'text-neutral-500'}`}>
                       Limit: {clause.limit} · Deductible: {clause.deductible}
                     </div>
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-[10px] text-cyan-400">{clause.source}</div>
-                  <div className="text-[9px] text-slate-500">{clause.sha256}</div>
+                  <div className="text-[10px] font-bold">{clause.source}</div>
+                  <div className={`text-[9px] ${isDark ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                    {clause.sha256}
+                  </div>
                 </div>
               </div>
             ))}
@@ -209,43 +286,61 @@ export function ReviewerPanel({
 
         {/* Decision Actions */}
         {decisionState === 'idle' ? (
-          <div className="flex items-center justify-between pt-3 border-t border-slate-800">
+          <div
+            className={`flex items-center justify-between pt-3 border-t ${
+              isDark ? 'border-neutral-800' : 'border-neutral-200'
+            }`}
+          >
             <button
               onClick={() => setRejectModalOpen(true)}
               disabled={isSubmitting}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-800 text-xs font-medium transition-colors"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-rose-600/10 hover:bg-rose-600/20 text-rose-500 border border-rose-500/30 text-xs font-medium transition-colors cursor-pointer"
             >
               <XCircle className="w-4 h-4" /> Reject (Requires Reason)
             </button>
             <button
               onClick={handleApprove}
               disabled={isSubmitting}
-              className="flex items-center gap-2 px-6 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-all shadow-[0_0_20px_rgba(16,185,129,0.4)]"
+              className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-semibold text-xs transition-all shadow-sm cursor-pointer ${
+                isDark
+                  ? 'bg-white hover:bg-neutral-200 text-black font-bold'
+                  : 'bg-black hover:bg-neutral-800 text-white font-bold'
+              }`}
             >
               <CheckCircle2 className="w-4 h-4" />
               Sign & Approve for PolicyCenter Deploy
             </button>
           </div>
         ) : decisionState === 'approved' ? (
-          <div className="p-4 rounded-xl bg-emerald-950/80 border border-emerald-600 text-center space-y-2">
-            <div className="flex items-center justify-center gap-2 text-emerald-300 font-bold text-sm">
-              <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+          <div
+            className={`p-4 rounded-xl border text-center space-y-2 ${
+              isDark
+                ? 'bg-neutral-900 border-white/20'
+                : 'bg-neutral-100 border-neutral-300'
+            }`}
+          >
+            <div className="flex items-center justify-center gap-2 font-bold text-sm">
+              <CheckCircle2 className="w-5 h-5" />
               Signed & Approved by {selectedReviewer}
             </div>
-            <p className="text-xs text-slate-300">
+            <p className={`text-xs ${isDark ? 'text-neutral-300' : 'text-neutral-600'}`}>
               HMAC Gate Token minted. Package authorized for Guidewire cloud deployment.
             </p>
             {onDeployTrigger && (
               <button
                 onClick={onDeployTrigger}
-                className="mt-2 inline-flex items-center gap-1.5 px-5 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold shadow-lg"
+                className={`mt-2 inline-flex items-center gap-1.5 px-5 py-2 rounded-lg font-semibold text-xs transition-all cursor-pointer ${
+                  isDark
+                    ? 'bg-white hover:bg-neutral-200 text-black'
+                    : 'bg-black hover:bg-neutral-800 text-white'
+                }`}
               >
                 Proceed to Deploy Stepper <ChevronRight className="w-4 h-4" />
               </button>
             )}
           </div>
         ) : (
-          <div className="p-4 rounded-xl bg-rose-950/80 border border-rose-600 text-center text-xs text-rose-300">
+          <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500 text-center text-xs text-rose-500">
             Proposal rejected. Feedback sent to planner for reconfiguration.
           </div>
         )}
@@ -253,12 +348,18 @@ export function ReviewerPanel({
         {/* Reject Reason Modal */}
         {rejectModalOpen && (
           <div className="absolute inset-0 bg-black/80 backdrop-blur-md rounded-2xl flex items-center justify-center p-6 z-50">
-            <div className="bg-slate-900 border border-slate-700 rounded-xl p-5 max-w-md w-full text-xs space-y-3">
-              <div className="font-bold text-slate-100 flex items-center gap-2">
-                <XCircle className="w-4 h-4 text-rose-400" />
+            <div
+              className={`border rounded-xl p-5 max-w-md w-full text-xs space-y-3 ${
+                isDark
+                  ? 'bg-neutral-900 border-neutral-700 text-white'
+                  : 'bg-white border-neutral-300 text-neutral-900'
+              }`}
+            >
+              <div className="font-bold flex items-center gap-2">
+                <XCircle className="w-4 h-4 text-rose-500" />
                 Reject Compliance Sign-off
               </div>
-              <p className="text-slate-400">
+              <p className={isDark ? 'text-neutral-400' : 'text-neutral-600'}>
                 You must provide an explicit compliance justification for rejecting this proposal:
               </p>
               <textarea
@@ -266,19 +367,27 @@ export function ReviewerPanel({
                 onChange={e => setRejectComment(e.target.value)}
                 placeholder="e.g. Underwriting authority requires ₹10,000,000 maximum aggregate..."
                 rows={3}
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-slate-200 outline-none focus:border-rose-500 font-sans"
+                className={`w-full border rounded-lg p-2.5 outline-none font-sans ${
+                  isDark
+                    ? 'bg-neutral-950 border-neutral-700 text-white focus:border-white'
+                    : 'bg-neutral-50 border-neutral-300 text-black focus:border-black'
+                }`}
               />
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   onClick={() => setRejectModalOpen(false)}
-                  className="px-3 py-1.5 rounded bg-slate-800 text-slate-300 hover:bg-slate-700"
+                  className={`px-3 py-1.5 rounded border ${
+                    isDark
+                      ? 'bg-neutral-800 border-neutral-700 text-neutral-300'
+                      : 'bg-neutral-100 border-neutral-300 text-neutral-700'
+                  }`}
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleReject}
                   disabled={!rejectComment.trim() || isSubmitting}
-                  className="px-4 py-1.5 rounded bg-rose-600 hover:bg-rose-500 text-white font-medium disabled:opacity-50"
+                  className="px-4 py-1.5 rounded bg-rose-600 hover:bg-rose-500 text-white font-medium disabled:opacity-50 cursor-pointer"
                 >
                   Confirm Rejection
                 </button>

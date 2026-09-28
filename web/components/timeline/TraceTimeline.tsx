@@ -16,9 +16,10 @@ import {
 
 interface TraceTimelineProps {
   events: BaseEvent[];
+  isDark?: boolean;
 }
 
-export function TraceTimeline({ events }: TraceTimelineProps) {
+export function TraceTimeline({ events, isDark = true }: TraceTimelineProps) {
   const [filter, setFilter] = useState<string>('all');
   const [autoScroll, setAutoScroll] = useState<boolean>(true);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -43,49 +44,65 @@ export function TraceTimeline({ events }: TraceTimelineProps) {
   const getEventBadge = (type: string) => {
     if (type.startsWith('planner.')) {
       return {
-        icon: <Sparkles className="w-3.5 h-3.5 text-purple-400" />,
-        badge: 'bg-purple-950/60 text-purple-300 border-purple-800/60',
+        icon: <Sparkles className="w-3.5 h-3.5" />,
+        badge: isDark
+          ? 'bg-white/10 text-white border-white/20'
+          : 'bg-neutral-100 text-black border-neutral-300',
       };
     }
     if (type.startsWith('tool.')) {
       return {
-        icon: <Wrench className="w-3.5 h-3.5 text-sky-400" />,
-        badge: 'bg-sky-950/60 text-sky-300 border-sky-800/60',
+        icon: <Wrench className="w-3.5 h-3.5" />,
+        badge: isDark
+          ? 'bg-white/10 text-white border-white/20'
+          : 'bg-neutral-100 text-black border-neutral-300',
       };
     }
     if (type === 'gate.blocked') {
       return {
-        icon: <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />,
-        badge: 'bg-rose-950/80 text-rose-300 border-rose-600 animate-pulse font-bold',
+        icon: <ShieldAlert className="w-3.5 h-3.5" />,
+        badge: isDark
+          ? 'bg-rose-500/20 text-rose-300 border-rose-500 font-bold'
+          : 'bg-rose-100 text-rose-800 border-rose-300 font-bold',
       };
     }
     if (type === 'gate.passed') {
       return {
-        icon: <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />,
-        badge: 'bg-emerald-950/80 text-emerald-300 border-emerald-600 font-bold',
+        icon: <ShieldCheck className="w-3.5 h-3.5" />,
+        badge: isDark
+          ? 'bg-white/15 text-white border-white/30 font-bold'
+          : 'bg-black/10 text-black border-black/20 font-bold',
       };
     }
     if (type.startsWith('verify.')) {
       return {
-        icon: <Activity className="w-3.5 h-3.5 text-emerald-400" />,
-        badge: 'bg-slate-900 text-emerald-300 border-slate-800',
+        icon: <Activity className="w-3.5 h-3.5" />,
+        badge: isDark
+          ? 'bg-white/5 text-neutral-300 border-white/10'
+          : 'bg-neutral-50 text-neutral-700 border-neutral-200',
       };
     }
     if (type.startsWith('review.')) {
       return {
-        icon: <UserCheck className="w-3.5 h-3.5 text-amber-400" />,
-        badge: 'bg-amber-950/60 text-amber-300 border-amber-800/60',
+        icon: <UserCheck className="w-3.5 h-3.5" />,
+        badge: isDark
+          ? 'bg-white/10 text-white border-white/20'
+          : 'bg-neutral-100 text-black border-neutral-300',
       };
     }
     if (type.startsWith('pc.')) {
       return {
-        icon: <Server className="w-3.5 h-3.5 text-cyan-400" />,
-        badge: 'bg-cyan-950/60 text-cyan-300 border-cyan-700/60',
+        icon: <Server className="w-3.5 h-3.5" />,
+        badge: isDark
+          ? 'bg-white/10 text-white border-white/20'
+          : 'bg-neutral-100 text-black border-neutral-300',
       };
     }
     return {
-      icon: <Terminal className="w-3.5 h-3.5 text-slate-400" />,
-      badge: 'bg-slate-900 text-slate-300 border-slate-800',
+      icon: <Terminal className="w-3.5 h-3.5" />,
+      badge: isDark
+        ? 'bg-white/5 text-neutral-400 border-white/10'
+        : 'bg-neutral-100 text-neutral-600 border-neutral-200',
     };
   };
 
@@ -141,24 +158,46 @@ export function TraceTimeline({ events }: TraceTimelineProps) {
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-950 border border-slate-800 rounded-xl overflow-hidden shadow-2xl">
-      {/* Header */}
-      <div className="px-3.5 py-2.5 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between">
+    <div
+      className={`flex flex-col h-full rounded-xl overflow-hidden shadow-sm border transition-colors ${
+        isDark
+          ? 'bg-[#050507] border-white/10 text-white'
+          : 'bg-white border-neutral-200 text-neutral-900'
+      }`}
+    >
+      {/* Header (Monochrome) */}
+      <div
+        className={`px-3.5 py-2.5 border-b flex items-center justify-between transition-colors ${
+          isDark
+            ? 'bg-neutral-950/80 border-white/10'
+            : 'bg-neutral-50/90 border-neutral-200'
+        }`}
+      >
         <div className="flex items-center gap-2">
-          <Terminal className="w-4 h-4 text-cyan-400" />
-          <span className="text-xs font-semibold text-slate-200 tracking-wider font-mono">
+          <Terminal className="w-4 h-4" />
+          <span className="text-xs font-semibold tracking-wider font-mono uppercase">
             TRACE TIMELINE
           </span>
-          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 border border-slate-700">
+          <span
+            className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+              isDark
+                ? 'bg-white/5 text-neutral-300 border-white/10'
+                : 'bg-neutral-100 text-neutral-700 border-neutral-200'
+            }`}
+          >
             {events.length}
           </span>
         </div>
         <button
           onClick={() => setAutoScroll(!autoScroll)}
-          className={`text-[10px] font-mono px-2 py-0.5 rounded border transition-colors flex items-center gap-1 ${
+          className={`text-[10px] font-mono px-2 py-0.5 rounded border transition-colors flex items-center gap-1 cursor-pointer ${
             autoScroll
-              ? 'bg-cyan-950/60 text-cyan-300 border-cyan-800'
-              : 'bg-slate-900 text-slate-400 border-slate-800'
+              ? isDark
+                ? 'bg-white/15 text-white border-white/30'
+                : 'bg-black text-white border-black'
+              : isDark
+              ? 'bg-neutral-900 text-neutral-400 border-neutral-800'
+              : 'bg-neutral-100 text-neutral-500 border-neutral-200'
           }`}
         >
           <ArrowDown className="w-2.5 h-2.5" />
@@ -166,8 +205,14 @@ export function TraceTimeline({ events }: TraceTimelineProps) {
         </button>
       </div>
 
-      {/* Filter Tabs */}
-      <div className="flex gap-1 p-1.5 bg-slate-900/40 border-b border-slate-800/60 overflow-x-auto text-[10px] font-mono">
+      {/* Filter Tabs (Monochrome) */}
+      <div
+        className={`flex gap-1 p-1.5 border-b overflow-x-auto text-[10px] font-mono transition-colors ${
+          isDark
+            ? 'bg-neutral-950/40 border-white/5'
+            : 'bg-neutral-100/60 border-neutral-200'
+        }`}
+      >
         {[
           { key: 'all', label: 'All' },
           { key: 'planner', label: 'Planner' },
@@ -180,10 +225,14 @@ export function TraceTimeline({ events }: TraceTimelineProps) {
           <button
             key={item.key}
             onClick={() => setFilter(item.key)}
-            className={`px-2 py-1 rounded transition-colors whitespace-nowrap ${
+            className={`px-2 py-1 rounded transition-colors whitespace-nowrap cursor-pointer ${
               filter === item.key
-                ? 'bg-slate-800 text-cyan-300 font-semibold border border-slate-700'
-                : 'text-slate-400 hover:text-slate-200'
+                ? isDark
+                  ? 'bg-white text-black font-bold'
+                  : 'bg-black text-white font-bold'
+                : isDark
+                ? 'text-neutral-400 hover:text-white'
+                : 'text-neutral-500 hover:text-black'
             }`}
           >
             {item.label}
@@ -194,10 +243,14 @@ export function TraceTimeline({ events }: TraceTimelineProps) {
       {/* Timeline Stream */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-2.5 space-y-2 font-mono text-xs">
         {filteredEvents.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-slate-500 text-center p-6 space-y-2">
-            <Activity className="w-8 h-8 text-slate-700 animate-pulse" />
+          <div
+            className={`h-full flex flex-col items-center justify-center text-center p-6 space-y-2 ${
+              isDark ? 'text-neutral-500' : 'text-neutral-400'
+            }`}
+          >
+            <Activity className="w-8 h-8 animate-pulse" />
             <div className="text-xs">Waiting for execution stream...</div>
-            <div className="text-[10px] text-slate-600">Click &quot;Start Demo Run&quot; above to initiate</div>
+            <div className="text-[10px]">Click &quot;Run Demo&quot; above to initiate</div>
           </div>
         ) : (
           filteredEvents.map(event => {
@@ -207,13 +260,27 @@ export function TraceTimeline({ events }: TraceTimelineProps) {
             return (
               <div
                 key={`${event.seq}-${event.type}`}
-                className="group relative flex gap-2 p-2 rounded-lg bg-slate-900/40 hover:bg-slate-900/90 border border-slate-800/60 hover:border-slate-700 transition-all"
+                className={`group relative flex gap-2 p-2 rounded-lg border transition-all ${
+                  isDark
+                    ? 'bg-white/[0.02] hover:bg-white/[0.05] border-white/[0.07] hover:border-white/20'
+                    : 'bg-neutral-50 hover:bg-neutral-100/80 border-neutral-200'
+                }`}
               >
                 <div className="flex flex-col items-center pt-0.5">
-                  <div className="p-1 rounded bg-slate-900 border border-slate-800">
+                  <div
+                    className={`p-1 rounded border ${
+                      isDark ? 'bg-black/60 border-white/10' : 'bg-white border-neutral-200 shadow-xs'
+                    }`}
+                  >
                     {badge.icon}
                   </div>
-                  <span className="text-[9px] text-slate-600 font-mono mt-1">#{event.seq}</span>
+                  <span
+                    className={`text-[9px] font-mono mt-1 ${
+                      isDark ? 'text-neutral-500' : 'text-neutral-400'
+                    }`}
+                  >
+                    #{event.seq}
+                  </span>
                 </div>
 
                 <div className="flex-1 min-w-0">
@@ -223,10 +290,20 @@ export function TraceTimeline({ events }: TraceTimelineProps) {
                     >
                       {event.type}
                     </span>
-                    <span className="text-[9px] text-slate-500">{timeStr}</span>
+                    <span
+                      className={`text-[9px] ${
+                        isDark ? 'text-neutral-500' : 'text-neutral-400'
+                      }`}
+                    >
+                      {timeStr}
+                    </span>
                   </div>
 
-                  <p className="text-[11px] text-slate-300 break-words leading-tight">
+                  <p
+                    className={`text-[11px] break-words leading-tight ${
+                      isDark ? 'text-neutral-200' : 'text-neutral-800'
+                    }`}
+                  >
                     {formatSummary(event)}
                   </p>
                 </div>
