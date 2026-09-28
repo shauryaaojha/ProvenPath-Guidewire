@@ -89,8 +89,14 @@ export function DeployPanel({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/75 backdrop-blur-md z-40 flex items-center justify-center p-4">
-      <div className="bg-slate-950 border border-slate-700 rounded-2xl max-w-3xl w-full p-6 shadow-[0_0_60px_rgba(0,0,0,0.8)] text-slate-200">
+    <div
+      onClick={onClose}
+      className="fixed inset-0 bg-black/75 backdrop-blur-md z-40 flex items-center justify-center p-4"
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        className="bg-slate-950 border border-slate-700 rounded-2xl max-w-3xl w-full p-6 shadow-[0_0_60px_rgba(0,0,0,0.8)] text-slate-200"
+      >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-5">
           <div className="flex items-center gap-3">

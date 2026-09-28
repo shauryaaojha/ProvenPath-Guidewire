@@ -26,6 +26,7 @@ export default function MissionControlPage() {
   const [isMetricsOpen, setIsMetricsOpen] = useState<boolean>(false);
   const [isPitchDeckOpen, setIsPitchDeckOpen] = useState<boolean>(false);
   const [isDeployOpen, setIsDeployOpen] = useState<boolean>(false);
+  const [isReviewOpen, setIsReviewOpen] = useState<boolean>(true);
   const [customBlockedData, setCustomBlockedData] = useState<GateBlockedPayload | null>(null);
 
   const {
@@ -49,8 +50,15 @@ export default function MissionControlPage() {
   } = useExecutionStream();
 
   const handleStartDemo = () => {
+    setIsReviewOpen(true);
     setCustomBlockedData(null);
     startStream(false);
+  };
+
+  const handleReset = () => {
+    setIsReviewOpen(true);
+    setCustomBlockedData(null);
+    resetStream();
   };
 
   const handleTamperBlocked = (data: unknown) => {
@@ -73,10 +81,11 @@ export default function MissionControlPage() {
         speed={speed}
         setSpeed={setSpeed}
         onStartDemo={handleStartDemo}
-        onReset={resetStream}
+        onReset={handleReset}
         onOpenMetrics={() => setIsMetricsOpen(true)}
         onOpenPitchDeck={() => setIsPitchDeckOpen(true)}
         onOpenDeploy={() => setIsDeployOpen(true)}
+        onOpenReview={() => setIsReviewOpen(true)}
         onTriggerTamper={handleTamperBlocked}
         isDark={isDark}
         onToggleTheme={toggleTheme}
@@ -158,10 +167,11 @@ export default function MissionControlPage() {
       />
 
       {/* 2. Compliance Reviewer Panel */}
-      {overallStatus === 'review_pending' && (
+      {overallStatus === 'review_pending' && isReviewOpen && (
         <ReviewerPanel
           reviewData={reviewData}
           onDeployTrigger={() => setIsDeployOpen(true)}
+          onDismiss={() => setIsReviewOpen(false)}
           isDark={isDark}
         />
       )}

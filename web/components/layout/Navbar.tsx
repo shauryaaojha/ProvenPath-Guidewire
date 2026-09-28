@@ -24,6 +24,7 @@ interface NavbarProps {
   onOpenMetrics: () => void;
   onOpenPitchDeck: () => void;
   onOpenDeploy: () => void;
+  onOpenReview?: () => void;
   onTriggerTamper: (data: unknown) => void;
   isDark: boolean;
   onToggleTheme: () => void;
@@ -39,6 +40,7 @@ export function Navbar({
   onOpenMetrics,
   onOpenPitchDeck,
   onOpenDeploy,
+  onOpenReview,
   onTriggerTamper,
   isDark,
   onToggleTheme,
@@ -81,8 +83,21 @@ export function Navbar({
             <Sparkles className="w-3.5 h-3.5 animate-spin" /> ACTUARIAL AUTO-REPAIR
           </span>
         );
-      case 'passed':
       case 'review_pending':
+        return (
+          <button
+            onClick={onOpenReview}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-full font-mono text-[11px] font-bold border transition-colors cursor-pointer ${
+              isDark
+                ? 'bg-white/15 border-white/40 text-white hover:bg-white/25 shadow-[0_0_12px_rgba(255,255,255,0.2)]'
+                : 'bg-black/10 border-black/30 text-black hover:bg-black/15'
+            }`}
+            title="Click to review and approve Guidewire PolicyCenter export"
+          >
+            <ShieldCheck className="w-3.5 h-3.5" /> REVIEW PENDING (GATE 2)
+          </button>
+        );
+      case 'passed':
         return (
           <span
             className={`flex items-center gap-1.5 px-3 py-1 rounded-full font-mono text-[11px] font-bold border ${
