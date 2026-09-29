@@ -110,17 +110,50 @@ class GeminiClient {
    * Returns the raw JSON response node for the caller to interpret.
    */
   function generate(systemPrompt : String, userPrompt : String) : Object {
-    var body = buildRequestBody(systemPrompt, userPrompt)
-    var bodyJson = MAPPER.writeValueAsString(body)
+    return post(MAPPER.writeValueAsString(buildRequestBody(systemPrompt, userPrompt)))
+  }
 
-    var url = API_BASE + MODEL + ":generateContent"
-    var request = HttpRequest.newBuilder().uri(URI.create(url)).header("Content-Type", "application/json").header("x-goog-api-key", _apiKey).timeout(Duration.ofSeconds(120)).POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8)).build()
-
-    var response = _http.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
-    if (response.statusCode() != 200) {
-      throw new RuntimeException("Gemini API error " + response.statusCode() + ": " + response.body())
+  /**
+   * Sends one generateContent request. Transient failures (429, 5xx, timeouts; e.g. the 503 "high demand"
+   * seen on the VM) are retried with backoff on each model in turn: GEMINI_MODEL first, then the
+   * comma-separated GEMINI_FALLBACK_MODELS (default gemini-3.7-flash, gemini-3.5-flash, gemini-flash-lite-latest). Only when all of them fail does the
+   * exception reach the Planner, which then falls back to the fixture and says so.
+   */
+  private function post(bodyJson : String) : Object {
+    var models = new ArrayList<String>()
+    models.add(MODEL)
+    for (m in (System.getenv("GEMINI_FALLBACK_MODELS") ?: "gemini-3.7-flash,gemini-3.5-flash,gemini-flash-lite-latest").split(",")) {
+      if (!m.trim().Empty and !models.contains(m.trim())) models.add(m.trim())
     }
-    return MAPPER.readValue(response.body(), Object)
+    var lastError = "no attempt made"
+    for (model in models) {
+      for (attempt in 1..3) {
+        try {
+          var request = HttpRequest.newBuilder().uri(URI.create(API_BASE + model + ":generateContent"))
+              .header("Content-Type", "application/json").header("x-goog-api-key", _apiKey)
+              .timeout(Duration.ofSeconds(120)).POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8)).build()
+          var response = _http.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+          if (response.statusCode() == 200) {
+            _lastModel = model
+            return MAPPER.readValue(response.body(), Object)
+          }
+          lastError = "Gemini API error " + response.statusCode() + " (" + model + "): " + response.body()
+          var retryable = response.statusCode() == 429 or response.statusCode() >= 500
+          if (!retryable) break
+        } catch (e : java.io.IOException) {
+          lastError = "Gemini request failed (" + model + "): " + e.Message
+        }
+        if (attempt < 3) Thread.sleep(1500L * attempt)
+      }
+    }
+    throw new RuntimeException(lastError)
+  }
+
+  var _lastModel : String
+
+  /** The model that answered the last successful request (shown in the planner's events). */
+  property get LastModel() : String {
+    return _lastModel
   }
 
   /**
@@ -128,17 +161,7 @@ class GeminiClient {
    * contents = list of {role, parts:[{text}]} or {role, parts:[{functionCall}]} or {role, parts:[{functionResponse}]}
    */
   function generateWithHistory(systemPrompt : String, contents : List<Map<String, Object>>) : Object {
-    var body = buildRequestBodyWithHistory(systemPrompt, contents)
-    var bodyJson = MAPPER.writeValueAsString(body)
-
-    var url = API_BASE + MODEL + ":generateContent"
-    var request = HttpRequest.newBuilder().uri(URI.create(url)).header("Content-Type", "application/json").header("x-goog-api-key", _apiKey).timeout(Duration.ofSeconds(120)).POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8)).build()
-
-    var response = _http.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
-    if (response.statusCode() != 200) {
-      throw new RuntimeException("Gemini API error " + response.statusCode() + ": " + response.body())
-    }
-    return MAPPER.readValue(response.body(), Object)
+    return post(MAPPER.writeValueAsString(buildRequestBodyWithHistory(systemPrompt, contents)))
   }
 
   private function buildRequestBody(systemPrompt : String, userPrompt : String) : Map<String, Object> {
