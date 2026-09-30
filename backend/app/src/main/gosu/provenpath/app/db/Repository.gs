@@ -312,6 +312,70 @@ class Repository {
         {executionId, afterSeq})
   }
 
+  // ---------------------------------------------------------------- planner memory (append-only)
+
+  /** Appends one model-conversation turn with the next per-execution seq. */
+  function appendTurn(executionId : String, role : String, kind : String, contentJson : String) {
+    _db.update("INSERT INTO pp_conversation_turn (execution_id, seq, role, kind, content) VALUES (?, " +
+        "(SELECT COALESCE(MAX(seq), 0) + 1 FROM pp_conversation_turn WHERE execution_id = ?), ?, ?, ?::jsonb)",
+        {executionId, executionId, role, kind, contentJson})
+  }
+
+  function turns(executionId : String) : List<Map<String, Object>> {
+    return _db.query("SELECT seq, role, kind, content::text AS content, created_at FROM pp_conversation_turn " +
+        "WHERE execution_id = ? ORDER BY seq", {executionId})
+  }
+
+  // ---------------------------------------------------------------- revisions
+
+  function insertRevision(executionId : String, instruction : String, fromIteration : int) : String {
+    var row = _db.queryOne("INSERT INTO pp_revision (execution_id, instruction, from_iteration, status) " +
+        "VALUES (?, ?, ?, 'running') RETURNING id", {executionId, instruction, fromIteration})
+    return row.get("id") as String
+  }
+
+  function finishRevision(id : String, status : String, toIteration : Integer, detail : String) {
+    _db.update("UPDATE pp_revision SET status = ?, to_iteration = ?, detail = ?, updated_at = NOW() WHERE id = ?::uuid",
+        {status, toIteration, detail, id})
+  }
+
+  function revisions(executionId : String) : List<Map<String, Object>> {
+    return _db.query("SELECT id, instruction, from_iteration, to_iteration, status, detail, created_at, updated_at " +
+        "FROM pp_revision WHERE execution_id = ? ORDER BY created_at", {executionId})
+  }
+
+  /** The newest proposal of an execution (highest iteration), with its row id. */
+  function latestProposalRow(executionId : String) : Map<String, Object> {
+    return _db.queryOne("SELECT id, proposal_id, iteration, proposal::text AS proposal FROM pp_proposal " +
+        "WHERE execution_id = ? ORDER BY iteration DESC LIMIT 1", {executionId})
+  }
+
+  function proposalRowsForExecution(executionId : String) : List<Map<String, Object>> {
+    return _db.query("SELECT id, proposal_id, iteration, proposal::text AS proposal, created_at FROM pp_proposal " +
+        "WHERE execution_id = ? ORDER BY iteration", {executionId})
+  }
+
+  // ---------------------------------------------------------------- pre-deployment reports
+
+  function insertReport(executionId : String, runId : String, reportJson : String, sha : String) : String {
+    var row = _db.queryOne("INSERT INTO pp_report (execution_id, run_id, report, report_sha256) VALUES (?, ?, ?::jsonb, ?) RETURNING id",
+        {executionId, runId, reportJson, sha})
+    return row.get("id") as String
+  }
+
+  function latestReport(executionId : String) : Map<String, Object> {
+    return _db.queryOne("SELECT id, run_id, report::text AS report, report_sha256, created_at FROM pp_report " +
+        "WHERE execution_id = ? ORDER BY created_at DESC LIMIT 1", {executionId})
+  }
+
+  function latestReportForRun(runId : String) : Map<String, Object> {
+    return _db.queryOne("SELECT id, run_id, report_sha256, created_at FROM pp_report WHERE run_id = ? ORDER BY created_at DESC LIMIT 1", {runId})
+  }
+
+  function setDeploymentReport(deploymentId : String, reportId : String) {
+    _db.update("UPDATE pp_deployment SET report_id = ?::uuid WHERE id = ?::uuid", {reportId, deploymentId})
+  }
+
   static function isUuid(s : String) : boolean {
     return s != null and s.matches("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
   }

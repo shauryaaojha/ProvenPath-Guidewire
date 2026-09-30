@@ -38,6 +38,8 @@ class AppIntegrationTest {
   static var _s : Services
   static var _server : Server
   static var _port : int
+  /** Same database, with a planner that keeps memory and takes change requests. */
+  static var _rs : Services
   static var _http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()
 
   @BeforeAll
@@ -57,6 +59,7 @@ class AppIntegrationTest {
     }
     _db.resetForTests()
     _s = new Services(new Config(), _db, null, new TestPackageBuilder())
+    _rs = new Services(new Config(), _db, null, new TestPackageBuilder(), new TestRevisablePlanner())
     Seeder.seed(_s.Repo, _s.Loader)
     var sock = new ServerSocket(0)
     _port = sock.LocalPort
@@ -231,6 +234,8 @@ class AppIntegrationTest {
   @Test
   function deployThenAgentPullsAndReports() {
     var id = approvedFlow()
+    expectApi("report_required", \ -> { _s.Deployments.deploy(id) })
+    _s.Reports.generate(id)
     var dep = _s.Deployments.deploy(id)
     var depId = dep.get("deploymentId") as String
     Assertions.assertEquals("deploying", _s.Repo.execution(id).get("status"))
@@ -253,6 +258,90 @@ class AppIntegrationTest {
       Assertions.assertTrue(t.contains(typ), "missing " + typ)
     }
     Assertions.assertNull(_s.Agent.next("test-agent"), "queue must be empty")
+  }
+
+  // ------------------------------------------------------------------ changes (revisions), memory and the report
+
+  @Test
+  function aChangeContinuesTheStoredConversation() {
+    var id = _rs.Executions.start(PROMPT)
+    Assertions.assertEquals("review_pending", _rs.Repo.execution(id).get("status"))
+    var before = _rs.Executions.Memory.summary(id).size()
+    Assertions.assertEquals(2, before, "request + model turn stored")
+
+    // 30L extortion on a 50L aggregate: the change is made, and the gate blocks it by name
+    _rs.Executions.revise(id, "please set the extortion limit to 3000000")
+    var rev = _rs.Repo.revisions(id).last()
+    Assertions.assertEquals("blocked", rev.get("status"))
+    Assertions.assertEquals("verified_fail", _rs.Repo.execution(id).get("status"))
+    var turns = _rs.Executions.Memory.summary(id)
+    Assertions.assertEquals(4, turns.size())
+    Assertions.assertTrue((turns.last().get("text") as String).contains("given 2 earlier turns"), "the planner saw the stored memory: " + turns.last())
+    var t = _rs.Bus.history(id, 0).map(\ e -> e.Type)
+    Assertions.assertTrue(t.contains("revision.requested") and t.contains("gate.blocked"))
+    Assertions.assertTrue(_rs.Repo.deploymentsForExecution(id).Empty)
+  }
+
+  @Test
+  function memoryIsAppendOnly() {
+    var id = _rs.Executions.start(PROMPT)
+    Assertions.assertThrows(Exception, \ -> { _db.update("UPDATE pp_conversation_turn SET kind = 'x' WHERE execution_id = ?", {id}) })
+    Assertions.assertThrows(Exception, \ -> { _db.update("DELETE FROM pp_conversation_turn WHERE execution_id = ?", {id}) })
+    Assertions.assertEquals(2, _rs.Executions.Memory.summary(id).size())
+  }
+
+  @Test
+  function aPassedChangeNeedsANewApprovalAndAReportBeforeDeploy() {
+    var id = _rs.Executions.start(PROMPT)
+    var firstRun = _rs.Repo.latestRun(id).get("id") as String
+    _rs.Reviews.decide(id, firstRun, reviewerId(), "approve", null)
+
+    _rs.Executions.revise(id, "lower the extortion limit to 1500000")
+    Assertions.assertEquals("passed", _rs.Repo.revisions(id).last().get("status"))
+    Assertions.assertEquals("review_pending", _rs.Repo.execution(id).get("status"), "an earlier approval never covers a change")
+    expectApi("not_approved", \ -> { _rs.Deployments.deploy(id) })
+    var newRun = _rs.Repo.latestRun(id).get("id") as String
+    Assertions.assertNotEquals(firstRun, newRun)
+    expectApi("stale_run", \ -> { _rs.Reviews.decide(id, firstRun, reviewerId(), "approve", null) })
+    _rs.Reviews.decide(id, newRun, reviewerId(), "approve", null)
+    expectApi("report_required", \ -> { _rs.Deployments.deploy(id) })
+
+    var rep = _rs.Reports.generate(id)
+    var report = rep.get("report") as Map<String, Object>
+    Assertions.assertEquals(newRun, report.get("runId"))
+    Assertions.assertEquals("approved", (report.get("review") as Map<String, Object>).get("status"))
+    var history = report.get("history") as List<Map<String, Object>>
+    Assertions.assertEquals(2, history.size())
+    Assertions.assertEquals("requested change", history.last().get("cause"))
+    Assertions.assertEquals("lower the extortion limit to 1500000", history.last().get("instruction"))
+    var change = (history.last().get("changes") as List<Map<String, Object>>).single()
+    Assertions.assertEquals("limitMaxInr", change.get("field"))
+    Assertions.assertEquals("SMCyberExtortionCov", change.get("patternCode"))
+    Assertions.assertTrue((report.get("clauses") as List<Map<String, Object>>).allMatch(\ c ->
+        (c.get("citations") as List<Map<String, Object>>).allMatch(\ x -> x.get("matchesSource") == true)), "every citation matches its source")
+    Assertions.assertEquals(64, (rep.get("reportSha256") as String).length())
+
+    var dep = _rs.Deployments.deploy(id)
+    Assertions.assertEquals("queued", dep.get("status"))
+    var exported = _rs.Bus.history(id, 0).lastWhere(\ e -> e.Type == "pc.export")
+    Assertions.assertEquals(rep.get("reportSha256"), exported.Payload.get("reportSha256"))
+    _rs.Agent.next("test-agent") // drain the queue for the other tests
+  }
+
+  @Test
+  function aChangeTheModelCannotMakeLeavesEverythingAsItWas() {
+    var id = _rs.Executions.start(PROMPT)
+    _rs.Executions.revise(id, "make it prettier")
+    var rev = _rs.Repo.revisions(id).last()
+    Assertions.assertEquals("failed", rev.get("status"))
+    Assertions.assertEquals("review_pending", _rs.Repo.execution(id).get("status"), "status restored")
+    Assertions.assertTrue(_rs.Bus.history(id, 0).hasMatch(\ e -> e.Type == "revision.failed"))
+  }
+
+  @Test
+  function theFixturePlannerTakesNoChanges() {
+    var id = flow()
+    expectApi("revisions_need_live_planner", \ -> { _s.Executions.revise(id, "lower the extortion limit to 1500000") })
   }
 
   // ------------------------------------------------------------------ replay + provenance

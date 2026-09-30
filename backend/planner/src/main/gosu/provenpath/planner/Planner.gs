@@ -14,35 +14,31 @@ uses com.fasterxml.jackson.databind.ObjectMapper
 uses provenpath.contracts.Citation
 uses provenpath.contracts.Clause
 uses provenpath.contracts.ClauseKind
+uses provenpath.contracts.ConversationPort
 uses provenpath.contracts.EventPort
 uses provenpath.contracts.Json
 uses provenpath.contracts.NodeStatus
-uses provenpath.contracts.PlannerPort
 uses provenpath.contracts.Proposal
 uses provenpath.contracts.RegulatorySource
+uses provenpath.contracts.RevisablePlannerPort
 uses provenpath.contracts.Verdict
 uses provenpath.contracts.VerdictStatus
 uses provenpath.contracts.VerifyPort
 
 /**
- * Track C — Live Gemini Planner.
+ * Track C: the live Gemini planner, loaded by class name when LLM_MODE=live (provenpath.planner.Planner).
+ * Depends ONLY on :contracts.
  *
- * Loaded by class name when LLM_MODE=live (provenpath.planner.Planner).
- * Depends ONLY on :contracts — never uses provenpath.core.* or provenpath.app.*.
- *
- * Flow:
- *   1. RAG-lite: keyword-retrieve relevant sources from sources.yaml into the system prompt.
- *   2. Call Gemini with the 4 tool function declarations.
- *   3. Replay tool calls: propose_product → add_coverage → verify_compliance.
- *      The actual verify is done via VerifyPort (the deterministic gate).
- *   4. If BLOCKED, feed named failures back to Gemini (repair loop, max 2 iterations).
- *   5. If still blocked after 2 iterations, fall back to the fixture.
- *   6. Return the LAST Verdict unchanged.
- *
- * Demo path (tuned):
- *   Extortion ₹40L on ₹50L aggregate → CYB-RNG-002 BLOCKED → repair to ≤₹25L → PASSED.
+ * One conversation per execution, kept in a ConversationPort (the backend stores it append-only):
+ *   1. The request, with every registered source in the system prompt.
+ *   2. Gemini calls tools (propose_product, add_coverage); every call gets a functionResponse turn back.
+ *   3. The proposal goes to the deterministic gate (VerifyPort). If BLOCKED, the named failures go back into the
+ *      same conversation and Gemini repairs (at most MAX_REPAIR_ITERATIONS times).
+ *   4. Later, a person can ask for changes (revise): Gemini continues the SAME conversation with the current
+ *      proposal, and the revised proposal goes through the whole gate again.
+ * The model only proposes; the verdict returned is always the verifier's, unchanged.
  */
-class Planner implements PlannerPort {
+class Planner implements RevisablePlannerPort {
 
   static final var MAPPER : ObjectMapper = new ObjectMapper()
   static final var MAX_REPAIR_ITERATIONS : int = 2
@@ -63,17 +59,22 @@ class Planner implements PlannerPort {
   }
 
   override function run(executionId : String, prompt : String, verifier : VerifyPort, events : EventPort) : Verdict {
+    return runWithMemory(executionId, prompt, verifier, events, null)
+  }
+
+  override function runWithMemory(executionId : String, prompt : String, verifier : VerifyPort, events : EventPort,
+                                  memory : ConversationPort) : Verdict {
     if (_apiKey == null or _apiKey.trim().Empty) {
       events.emit(executionId, "planner.step", m({"step" -> 0, "action" -> "fallback",
           "note" -> "GEMINI_API_KEY not set — falling back to fixture", "mode" -> "live"}))
       return runFixtureFallback(executionId, prompt, verifier, events)
     }
-
     events.emit(executionId, "planner.step", m({"step" -> 1, "action" -> "plan",
         "note" -> "Building SMCyber product proposal via Gemini", "mode" -> "live"}))
-
     try {
-      return runLive(executionId, prompt, verifier, events)
+      var convo = new Conversation(executionId, memory)
+      convo.add("request", userText(buildUserPrompt(prompt)))
+      return converse(executionId, buildSystemPrompt(ragLite(prompt)), convo, null, 1, verifier, events, false)
     } catch (e : Throwable) {
       events.emit(executionId, "planner.step", m({"step" -> 99, "action" -> "fallback",
           "note" -> "Gemini call failed (" + e.Message + ") — falling back to fixture", "mode" -> "live"}))
@@ -81,139 +82,164 @@ class Planner implements PlannerPort {
     }
   }
 
-  // ─── Live Gemini path ────────────────────────────────────────────────────────
+  override function revise(executionId : String, instruction : String, current : Proposal, nextIteration : int,
+                           verifier : VerifyPort, events : EventPort, memory : ConversationPort) : Verdict {
+    if (_apiKey == null or _apiKey.trim().Empty) {
+      throw new IllegalStateException("Changes need the live Gemini planner, and GEMINI_API_KEY is not set")
+    }
+    var convo = new Conversation(executionId, memory)
+    convo.loadStored()
+    events.emit(executionId, "planner.step", m({"step" -> 1, "action" -> "revise", "mode" -> "live",
+        "memoryTurns" -> convo.Size,
+        "note" -> "Applying the requested change with Gemini, continuing the conversation (" + convo.Size + " earlier turns)"}))
+    convo.add("revision", userText(buildRevisionRequest(instruction, current)))
+    var working = Json.parse(Json.canonical(current), Proposal)
+    working.Iteration = nextIteration
+    return converse(executionId, buildSystemPrompt(ragLite(instruction)), convo, working, nextIteration, verifier, events, true)
+  }
 
-  private function runLive(executionId : String, prompt : String, verifier : VerifyPort, events : EventPort) : Verdict {
-    var ragContext = ragLite(prompt)
-    var systemPrompt = buildSystemPrompt(ragContext)
-    var userPrompt = buildUserPrompt(prompt)
+  // ─── The conversation loop (first run, repairs and revisions) ────────────────
 
-    // Build multi-turn history: start with user message
-    var history = new ArrayList<Map<String, Object>>()
-    history.add(m({"role" -> "user", "parts" -> list(m({"text" -> userPrompt}))}))
+  private function converse(executionId : String, systemPrompt : String, convo : Conversation, start : Proposal,
+                            iteration : int, verifier : VerifyPort, events : EventPort, isRevision : boolean) : Verdict {
+    var proposal = start
+    var stepN = 2
+    var response = _gemini.generateWithHistory(systemPrompt, convo.Contents)
+    var calls = recordModelTurn(convo, response)
+    if (calls.Empty) {
+      var text = GeminiClient.extractText(response)
+      if (isRevision) {
+        throw new IllegalStateException("Gemini did not change the proposal: " + abbreviate(text, 300))
+      }
+    }
+    proposal = processFunctionCalls(executionId, calls, proposal, events, convo, stepN, iteration)
+    stepN += calls.size()
 
-    var proposal : Proposal = null
-    var verdict : Verdict = null
-
-    // Iteration 1: propose + add coverages + verify
-    var stepN = 1
-    var response = _gemini.generateWithHistory(systemPrompt, history)
-    var functionCalls = GeminiClient.extractFunctionCalls(response)
-
-    // Process initial tool calls from the model
-    proposal = processFunctionCalls(executionId, functionCalls, proposal, events, history, stepN)
-    stepN += functionCalls.size()
-
-    // Always verify what we have
     events.emit(executionId, "planner.step", m({"step" -> stepN, "action" -> "verify_compliance",
         "note" -> "Submitting proposal to the deterministic gate", "mode" -> "live"}))
-
     if (proposal == null) {
-      proposal = buildMinimalProposal(executionId, 1)
+      proposal = buildMinimalProposal(executionId, iteration)
     }
-    verdict = verifyProposal(executionId, proposal, verifier, events)
+    var verdict = verifyProposal(executionId, proposal, verifier, events)
+    recordGateResult(convo, verdict, proposal)
 
-    // Repair loop (up to MAX_REPAIR_ITERATIONS)
-    var repairIteration = 0
-    while (verdict.Status == VerdictStatus.BLOCKED and repairIteration < MAX_REPAIR_ITERATIONS) {
-      repairIteration++
+    var repairs = 0
+    while (verdict.Status == VerdictStatus.BLOCKED and repairs < MAX_REPAIR_ITERATIONS) {
+      repairs++
       var failures = collectFailures(verdict)
-
       // Contract (docs/events.md): runId, iteration, failedRule, clauseId, expected, actual, reason.
       // The full list rides along in "failures" for multi-rule repairs.
       var first = failures.isEmpty() ? m({}) : failures.get(0)
       events.emit(executionId, "planner.repair", m({
-          "runId" -> verdict.RunId,
-          "iteration" -> (repairIteration + 1),
-          "failedRule" -> first.get("ruleCode"),
-          "clauseId" -> first.get("clauseId"),
-          "expected" -> first.get("expected"),
-          "actual" -> first.get("actual"),
-          "reason" -> first.get("reason"),
+          "runId" -> verdict.RunId, "iteration" -> (proposal.Iteration + 1),
+          "failedRule" -> first.get("ruleCode"), "clauseId" -> first.get("clauseId"),
+          "expected" -> first.get("expected"), "actual" -> first.get("actual"), "reason" -> first.get("reason"),
           "failures" -> failures,
           "note" -> "Feeding " + failures.size() + " failure(s) back to Gemini for repair"}))
 
-      // Append model response and function responses to history
-      appendModelTurn(history, response)
-      appendRepairRequest(history, failures, verdict.RunId)
-
-      response = _gemini.generateWithHistory(systemPrompt, history)
-      functionCalls = GeminiClient.extractFunctionCalls(response)
-
-      if (!functionCalls.isEmpty()) {
-        proposal.Iteration = repairIteration + 1
-        proposal = processFunctionCalls(executionId, functionCalls, proposal, events, history, stepN + repairIteration * 10)
-      } else {
-        // Model returned text instead of tool calls — try to parse or break
-        var extractedText = GeminiClient.extractText(response)
-        var msgText = "Gemini returned text instead of tool calls: " + extractedText.substring(0, Math.min(200, extractedText.length()))
-        events.emit(executionId, "planner.step", m({"step" -> (stepN + repairIteration * 10),
-            "action" -> "repair_text",
-            "note" -> msgText,
+      response = _gemini.generateWithHistory(systemPrompt, convo.Contents)
+      calls = recordModelTurn(convo, response)
+      if (calls.Empty) {
+        events.emit(executionId, "planner.step", m({"step" -> stepN + repairs * 10, "action" -> "repair_text",
+            "note" -> "Gemini returned text instead of tool calls: " + abbreviate(GeminiClient.extractText(response), 200),
             "mode" -> "live"}))
         break
       }
-
+      proposal.Iteration = proposal.Iteration + 1
+      proposal = processFunctionCalls(executionId, calls, proposal, events, convo, stepN + repairs * 10, proposal.Iteration)
       verdict = verifyProposal(executionId, proposal, verifier, events)
+      recordGateResult(convo, verdict, proposal)
     }
-
     return verdict
+  }
+
+  /** Records the model's content turn verbatim (thought signatures included) and returns its function calls. */
+  private function recordModelTurn(convo : Conversation, response : Object) : List<Map<String, Object>> {
+    var r = response as Map<String, Object>
+    var candidates = r.get("candidates") as List<Object>
+    if (candidates != null and !candidates.isEmpty()) {
+      var content = (candidates.get(0) as Map<String, Object>).get("content") as Map<String, Object>
+      if (content != null) {
+        if (content.get("role") == null) content.put("role", "model")
+        convo.add("model", content)
+      }
+    }
+    return GeminiClient.extractFunctionCalls(response)
+  }
+
+  /** Tells the model what the gate decided, in the same conversation, so a later change starts from the truth. */
+  private function recordGateResult(convo : Conversation, verdict : Verdict, p : Proposal) {
+    if (verdict.Status == VerdictStatus.PASSED) {
+      convo.add("gate_feedback", userText("The deterministic gate PASSED iteration " + p.Iteration +
+          " (verdict hash " + verdict.VerdictHash + "). It now waits for a named Compliance Reviewer."))
+    } else {
+      convo.add("gate_feedback", userText(buildRepairRequest(collectFailures(verdict), verdict.RunId)))
+    }
   }
 
   // ─── Tool call processing ────────────────────────────────────────────────────
 
-  private function processFunctionCalls(executionId : String, calls : List<Map<String, Object>>,
-      existing : Proposal, events : EventPort, history : List<Map<String, Object>>, stepOffset : int) : Proposal {
+  private function processFunctionCalls(executionId : String, calls : List<Map<String, Object>>, existing : Proposal,
+                                        events : EventPort, convo : Conversation, stepOffset : int, iteration : int) : Proposal {
     var p = existing
     var stepN = stepOffset
+    var responses = new ArrayList<Object>()
 
     for (fc in calls) {
       var name = fc.get("name") as String
       var args = (fc.get("args") ?: new LinkedHashMap<String, Object>()) as Map<String, Object>
       args.put("executionId", executionId)
-
       events.emit(executionId, "tool.called", m({"tool" -> name, "args" -> sanitizeArgs(args)}))
 
       var result : Map<String, Object>
-
       switch (name) {
         case "propose_product":
-          // A re-propose during repair keeps the iteration, the proposal id and the clauses so far.
+          // A re-propose during repair or revision keeps the iteration, the proposal id and the clauses so far.
           var prior = p
-          p = buildProposalFromArgs(executionId, args, prior == null ? 1 : prior.Iteration)
+          p = buildProposalFromArgs(executionId, args, prior == null ? iteration : prior.Iteration)
           if (prior != null) {
             p.ProposalId = prior.ProposalId
             p.Clauses.addAll(prior.Clauses)
             if (p.ProseSummary.Empty) p.ProseSummary = prior.ProseSummary
           }
-          result = m({"proposalId" -> p.ProposalId, "iteration" -> p.Iteration, "clauseCount" -> 0})
+          result = m({"proposalId" -> p.ProposalId, "iteration" -> p.Iteration, "clauseCount" -> p.Clauses.size()})
           events.emit(executionId, "planner.step", m({"step" -> stepN, "action" -> name,
-              "note" -> "Proposal skeleton created", "mode" -> "live"}))
+              "note" -> (prior == null ? "Proposal skeleton created" : "Product-level values updated"), "mode" -> "live"}))
           break
         case "add_coverage":
-          if (p == null) p = buildMinimalProposal(executionId, 1)
-          var clauses = parseClauses(args)
-          if (clauses != null) {
-            for (c in clauses) {
-              p.Clauses.removeWhere(\ x -> x.ClauseId == c.ClauseId)
-              p.Clauses.add(c)
+          if (p == null) p = buildMinimalProposal(executionId, iteration)
+          var removed = 0
+          var toRemove = args.get("removeClauseIds") as List<Object>
+          if (toRemove != null) {
+            for (id in toRemove) {
+              var before = p.Clauses.size()
+              p.Clauses.removeWhere(\ x -> x.ClauseId == String.valueOf(id))
+              removed += before - p.Clauses.size()
             }
+          }
+          var clauses = parseClauses(args)
+          for (c in clauses) {
+            p.Clauses.removeWhere(\ x -> x.ClauseId == c.ClauseId)
+            p.Clauses.add(c)
           }
           if (args.containsKey("proseSummary")) {
             p.ProseSummary = args.get("proseSummary") as String
           }
-          result = m({"clauseCount" -> p.Clauses.size()})
-          events.emit(executionId, "planner.step", m({"step" -> stepN, "action" -> name,
-              "note" -> "Added " + (clauses == null ? 0 : clauses.size()) + " clause(s)", "mode" -> "live"}))
+          result = m({"clauseCount" -> p.Clauses.size(), "addedOrReplaced" -> clauses.size(), "removed" -> removed})
+          events.emit(executionId, "planner.step", m({"step" -> stepN, "action" -> name, "mode" -> "live",
+              "note" -> "Added or replaced " + clauses.size() + " clause(s)" + (removed > 0 ? ", removed " + removed : "")}))
           break
         default:
-          // verify_compliance and deploy_product are handled outside this loop
-          result = m({"skipped" -> "handled by verifier"})
+          // verify_compliance runs after the tool calls, through the deterministic gate
+          result = m({"note" -> "the deterministic gate verifies the proposal after these tool calls"})
           break
       }
-
       events.emit(executionId, "tool.result", m({"tool" -> name, "result" -> result}))
+      responses.add(m({"functionResponse" -> m({"name" -> name, "response" -> result})}))
       stepN++
+    }
+    if (!responses.Empty) {
+      convo.add("tool_results", m({"role" -> "user", "parts" -> responses}))
     }
     return p
   }
@@ -243,17 +269,7 @@ class Planner implements PlannerPort {
     return failures
   }
 
-  private function appendModelTurn(history : List<Map<String, Object>>, response : Object) {
-    var r = response as Map<String, Object>
-    var candidates = r.get("candidates") as List<Object>
-    if (candidates == null or candidates.isEmpty()) return
-    var content = (candidates.get(0) as Map<String, Object>).get("content") as Map<String, Object>
-    if (content != null) {
-      history.add(content)
-    }
-  }
-
-  private function appendRepairRequest(history : List<Map<String, Object>>, failures : List<Map<String, Object>>, runId : String) {
+  private function buildRepairRequest(failures : List<Map<String, Object>>, runId : String) : String {
     var sb = new java.lang.StringBuilder()
     sb.append("The compliance gate returned BLOCKED (runId=").append(runId).append("). ")
     sb.append("Failing rules:\n")
@@ -262,11 +278,76 @@ class Planner implements PlannerPort {
       sb.append(" (expected=").append(f.get("expected")).append(", actual=").append(f.get("actual")).append(")\n")
     }
     sb.append("\nPlease repair the proposal by calling add_coverage with corrected clause values. ")
-    sb.append("All citations must be VERBATIM from sources.yaml. Remember:\n")
+    sb.append("If a person asked for a change, keep as much of it as the rules allow. ")
+    sb.append("All citations must be VERBATIM from the sources. Remember:\n")
     sb.append("  - CYB-RNG-002: extortion sublimit must be <= 50% of aggregateLimitInr\n")
     sb.append("  - CYB-CON-001: sum of first-party limits must not exceed aggregate\n")
-    sb.append("  - Citations must be byte-exact copies from sources.yaml full_text fields\n")
-    history.add(m({"role" -> "user", "parts" -> list(m({"text" -> sb.toString()}))}))
+    sb.append("  - Citations must be byte-exact copies from the sources' full_text\n")
+    return sb.toString()
+  }
+
+  /** The change request, with the current proposal attached so the model never works from a stale memory. */
+  private function buildRevisionRequest(instruction : String, current : Proposal) : String {
+    return "CHANGE REQUEST from the product manager (a person): \"" + instruction.trim() + "\"\n\n" +
+        "The current proposal is iteration " + current.Iteration + " and is shown below as JSON. Apply ONLY this change:\n" +
+        "- add_coverage adds or replaces clauses; a replaced clause keeps its clauseId and must include all its fields and citations.\n" +
+        "- add_coverage with removeClauseIds removes clauses.\n" +
+        "- propose_product changes product-level values (aggregateLimitInr, turnoverInr, minimumPremiumInr, targetEffectiveDate); existing clauses are kept.\n" +
+        "Do not change anything that was not asked for. Update proseSummary if any number in it changes. " +
+        "If the change would break a rule, make it anyway; the deterministic gate will name the failure and you will get a chance to repair.\n\n" +
+        "CURRENT PROPOSAL:\n" + Json.canonical(current)
+  }
+
+  private static function userText(text : String) : Map<String, Object> {
+    return m({"role" -> "user", "parts" -> list(m({"text" -> text}))})
+  }
+
+  private static function abbreviate(s : String, max : int) : String {
+    if (s == null) return ""
+    return s.length() <= max ? s : s.substring(0, max) + "…"
+  }
+
+  /**
+   * The conversation sent to Gemini: the stored turns (from memory) plus this call's new turns. Every new turn is
+   * written to memory as it happens. Consecutive turns of the same role are merged when sent, as the API expects.
+   */
+  static class Conversation {
+    var _executionId : String
+    var _memory : ConversationPort
+    var _turns : List<Map<String, Object>> = new ArrayList<Map<String, Object>>()
+
+    construct(executionId : String, memory : ConversationPort) {
+      _executionId = executionId
+      _memory = memory
+    }
+
+    function loadStored() {
+      if (_memory != null) _turns.addAll(_memory.load(_executionId))
+    }
+
+    function add(kind : String, turn : Map<String, Object>) {
+      _turns.add(turn)
+      _memory?.append(_executionId, kind, turn)
+    }
+
+    property get Size() : int { return _turns.size() }
+
+    property get Contents() : List<Map<String, Object>> {
+      var merged = new ArrayList<Map<String, Object>>()
+      for (t in _turns) {
+        var role = (t.get("role") as String) ?: "user"
+        var parts = (t.get("parts") as List<Object>) ?: new ArrayList<Object>()
+        if (!merged.Empty and merged.last().get("role") == role) {
+          (merged.last().get("parts") as List<Object>).addAll(parts)
+        } else {
+          var copy = new LinkedHashMap<String, Object>(t)
+          copy.put("role", role)
+          copy.put("parts", new ArrayList<Object>(parts))
+          merged.add(copy)
+        }
+      }
+      return merged
+    }
   }
 
   // ─── Prompt builders ─────────────────────────────────────────────────────────

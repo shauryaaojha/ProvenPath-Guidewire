@@ -14,15 +14,26 @@
       },
       "clauses": {
         "type": "array",
-        "items": { "$ref": "#/definitions/Clause" },
+        "items": {
+          "$ref": "#/definitions/Clause"
+        },
         "description": "Multiple clauses to add or replace in one call."
       },
       "proseSummary": {
         "type": "string",
         "description": "Updated plain-language summary. Every number must match a clause value exactly."
+      },
+      "removeClauseIds": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "clauseIds to remove from the draft (used when a person asks to drop a coverage or exclusion)."
       }
     },
-    "required": ["executionId"],
+    "required": [
+      "executionId"
+    ],
     "definitions": {
       "Citation": {
         "type": "object",
@@ -40,7 +51,11 @@
             "description": "VERBATIM copy of the full_text from sources.yaml for this source_code. Do not paraphrase."
           }
         },
-        "required": ["sourceCode", "section", "textSnippet"]
+        "required": [
+          "sourceCode",
+          "section",
+          "textSnippet"
+        ]
       },
       "Clause": {
         "type": "object",
@@ -51,7 +66,11 @@
           },
           "kind": {
             "type": "string",
-            "enum": ["COVERAGE", "EXCLUSION", "RATING"],
+            "enum": [
+              "COVERAGE",
+              "EXCLUSION",
+              "RATING"
+            ],
             "description": "Clause type."
           },
           "patternCode": {
@@ -65,17 +84,29 @@
           },
           "category": {
             "type": "string",
-            "enum": ["CyberFirstParty", "CyberThirdParty", "CyberExclusion", "CyberRating"],
+            "enum": [
+              "CyberFirstParty",
+              "CyberThirdParty",
+              "CyberExclusion",
+              "CyberRating"
+            ],
             "description": "Coverage category."
           },
           "owningEntityType": {
             "type": "string",
-            "enum": ["GeneralLiabilityLine"],
+            "enum": [
+              "GeneralLiabilityLine"
+            ],
             "description": "Must be GeneralLiabilityLine for Phase 1 (GL-line cyber coverages)."
           },
           "existence": {
             "type": "string",
-            "enum": ["Required", "Suggested", "Electable", "Preset"],
+            "enum": [
+              "Required",
+              "Suggested",
+              "Electable",
+              "Preset"
+            ],
             "description": "Existence type."
           },
           "limitMaxInr": {
@@ -94,26 +125,42 @@
           },
           "conditions": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "description": "Condition strings. Extortion coverage MUST include 'law-enforcement-notification'. CERT-In coverage MUST include 'cert-in-6-hour-reporting'. Fines coverage MUST include 'where-insurable-by-law'."
           },
           "factors": {
             "type": "object",
-            "additionalProperties": { "type": "number" },
+            "additionalProperties": {
+              "type": "number"
+            },
             "description": "Rating factors (RATING kind only). Each value must be 0.50–3.00."
           },
           "excludesPatternCodes": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "description": "Pattern codes excluded by this exclusion clause."
           },
           "citations": {
             "type": "array",
-            "items": { "$ref": "#/definitions/Citation" },
+            "items": {
+              "$ref": "#/definitions/Citation"
+            },
             "description": "At least one citation per clause. textSnippet must be VERBATIM from sources.yaml."
           }
         },
-        "required": ["kind", "patternCode", "name", "category", "owningEntityType", "existence", "citations"]
+        "required": [
+          "kind",
+          "patternCode",
+          "name",
+          "category",
+          "owningEntityType",
+          "existence",
+          "citations"
+        ]
       }
     }
   }

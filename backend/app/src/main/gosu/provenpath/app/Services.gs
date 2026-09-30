@@ -9,6 +9,7 @@ uses provenpath.app.services.AgentService
 uses provenpath.app.services.DeploymentService
 uses provenpath.app.services.ExecutionService
 uses provenpath.app.services.QueryService
+uses provenpath.app.services.ReportService
 uses provenpath.app.services.ReviewService
 uses provenpath.app.services.ToolService
 uses provenpath.app.services.VerifyService
@@ -35,6 +36,7 @@ class Services {
   var _agent : AgentService as readonly Agent
   var _tools : ToolService as readonly Tools
   var _query : QueryService as readonly Query
+  var _reports : ReportService as readonly Reports
   var _plannerStatus : String as readonly PlannerStatus
   var _builderStatus : String as readonly BuilderStatus
 
@@ -43,6 +45,11 @@ class Services {
    * @param builderOverride non-null replaces the class-name lookup (tests)
    */
   construct(config : Config, db : Db, executor : ExecutorService, builderOverride : PackageBuilderPort) {
+    this(config, db, executor, builderOverride, null)
+  }
+
+  /** @param plannerOverride non-null replaces the planner chosen by LLM_MODE (tests) */
+  construct(config : Config, db : Db, executor : ExecutorService, builderOverride : PackageBuilderPort, plannerOverride : PlannerPort) {
     _config = config
     _db = db
     _repo = new Repository(db)
@@ -52,7 +59,10 @@ class Services {
     _verify = new VerifyService(new Gate(_loader), _loader, _repo, _bus, config.NodeDelayMs)
 
     var planner : PlannerPort = null
-    if (config.LlmMode == "fixture") {
+    if (plannerOverride != null) {
+      planner = plannerOverride
+      _plannerStatus = plannerOverride.IntrinsicType.Name
+    } else if (config.LlmMode == "fixture") {
       planner = new FixturePlanner(config.FixturesDir)
       _plannerStatus = "fixture"
     } else {
@@ -82,6 +92,7 @@ class Services {
     _agent = new AgentService(_repo, _bus, config.AgentKey, config.AgentPollMs)
     _tools = new ToolService(_repo, _bus, _executions, _verify, _deployments)
     _query = new QueryService(_repo, _verify, _loader, config.EvalDir)
+    _reports = new ReportService(_repo, _bus, builder, _loader, _executions.Memory)
   }
 
   property get LlmMode() : String {

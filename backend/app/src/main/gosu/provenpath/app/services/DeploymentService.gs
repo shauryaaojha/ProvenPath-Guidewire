@@ -69,6 +69,17 @@ class DeploymentService {
     if (!GateToken.verify(run.get("gate_token") as String, runId, proposalHash, run.get("ruleset_hash") as String)) {
       throw new ApiException(409, "invalid_gate_token", "gate token does not verify; nothing was sent to PolicyCenter")
     }
+    // Only the newest version can ship: an approval never covers a later change.
+    var latestRun = _repo.latestRun(executionId)
+    if (latestRun == null or latestRun.get("id") != runId) {
+      throw new ApiException(409, "newer_version",
+          "a newer version of this product exists; it must pass the gate and be approved before anything is deployed")
+    }
+    var report = _repo.latestReportForRun(runId)
+    if (report == null) {
+      throw new ApiException(409, "report_required",
+          "generate the pre-deployment report for this version first; nothing was sent to PolicyCenter")
+    }
     if (_builder == null) {
       throw new ApiException(503, "exporter_unavailable", "PolicyCenter package builder is not available: " + _builderError)
     }
@@ -93,10 +104,11 @@ class DeploymentService {
       }
       var manifestJson = Json.canonical(pkg.Manifest)
       var deploymentId = _repo.insertDeployment(executionId, runId, review.get("id") as String, manifestJson, pkg.ZipBytes)
+      _repo.setDeploymentReport(deploymentId, report.get("id") as String)
       _bus.emit(executionId, "pc.export", VerifyService.map({
           "deploymentId" -> deploymentId, "runId" -> runId, "productCode" -> pkg.Manifest.ProductCode,
           "files" -> (pkg.Manifest.Files == null ? 0 : pkg.Manifest.Files.size()), "packageBytes" -> pkg.ZipBytes.length,
-          "manifestSha256" -> Hashing.sha256Hex(manifestJson)}))
+          "manifestSha256" -> Hashing.sha256Hex(manifestJson), "reportSha256" -> report.get("report_sha256")}))
       _bus.emit(executionId, "pc.queued", VerifyService.map({"deploymentId" -> deploymentId}))
       return VerifyService.map({"deploymentId" -> deploymentId, "executionId" -> executionId, "runId" -> runId, "status" -> "queued"})
     } catch (e : ApiException) {

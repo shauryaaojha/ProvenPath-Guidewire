@@ -85,6 +85,19 @@ class Server {
       json(ctx, 202, VerifyService.map({"executionId" -> id, "stream" -> "/api/v1/executions/" + id + "/stream"}))
     })
     app.get("/api/v1/executions/{id}", \ ctx -> { json(ctx, 200, _s.Query.execution(ctx.pathParam("id"))) })
+
+    // ---- changes requested by a person (Gemini continues the stored conversation) and the pre-deployment report
+    app.post("/api/v1/executions/{id}/revisions", \ ctx -> {
+      var revisionId = _s.Executions.revise(ctx.pathParam("id"), body(ctx).get("instruction") as String)
+      json(ctx, 202, VerifyService.map({"revisionId" -> revisionId, "status" -> "running"}))
+    })
+    app.get("/api/v1/executions/{id}/revisions", \ ctx -> { json(ctx, 200, _s.Repo.revisions(ctx.pathParam("id"))) })
+    app.get("/api/v1/executions/{id}/conversation", \ ctx -> {
+      var turns = _s.Executions.Memory.summary(ctx.pathParam("id"))
+      json(ctx, 200, VerifyService.map({"executionId" -> ctx.pathParam("id"), "turns" -> turns, "count" -> turns.size()}))
+    })
+    app.post("/api/v1/executions/{id}/report", \ ctx -> { json(ctx, 201, _s.Reports.generate(ctx.pathParam("id"))) })
+    app.get("/api/v1/executions/{id}/report", \ ctx -> { json(ctx, 200, _s.Reports.latest(ctx.pathParam("id"))) })
     app.post("/api/v1/executions/{id}/replay", \ ctx -> { json(ctx, 200, _s.Query.replay(ctx.pathParam("id"))) })
     app.sse("/api/v1/executions/{id}/stream", \ client -> stream(client))
 
